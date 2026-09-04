@@ -4,3 +4,4 @@ streamlit.log
 .streamlit/secrets.toml
 uploaded_datasets/
 .claude/
+gh_login.log
