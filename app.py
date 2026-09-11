@@ -190,10 +190,19 @@ PARTITION_REF = [("Training", "2012-2018", 52560), ("Test", "2019-2020", 17520),
 
 WEATHER_PREFIXES = ["JEJU_", "GOSAN_", "SUNGSAN_", "SEOGWIPO_"]
 
+GLOSSARY = [
+    ("MAE", "Mean Absolute Error — on average, how many megawatts the forecast is off by. Lower is better; it's in the same units as load (MW)."),
+    ("RMSE", "Root Mean Squared Error — like MAE, but squares errors before averaging, so a few big misses raise it more than many small ones."),
+    ("MAPE", "Mean Absolute Percentage Error — the average error as a percentage of actual load, so it's comparable across different demand levels."),
+    ("R²", "How much of the load's variation the model explains, from 0 to 1. 0.99 means it captures almost all of the pattern."),
+    ("Gain importance", "How much a feature reduced prediction error, summed across every tree split that used it — XGBoost's built-in way of ranking features."),
+    ("Stability selection", "Instead of trusting one feature-importance ranking, retrain on 30 random resamples and keep only features that rank highly almost every time."),
+]
+
 # --------------------------------------------------------------------------
 # Page config
 # --------------------------------------------------------------------------
-st.set_page_config(page_title="ProphetBoost Dashboard", page_icon="⚡", layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(page_title="ProphetBoost Studio", page_icon="⚡", layout="wide", initial_sidebar_state="collapsed")
 
 # --------------------------------------------------------------------------
 # Data loading
@@ -253,6 +262,18 @@ def get_df_for(entry):
             date_col = c
             break
     return df, date_col
+
+
+def delete_uploaded(rec_id):
+    records = read_manifest()
+    keep = [r for r in records if r["id"] != rec_id]
+    removed = [r for r in records if r["id"] == rec_id]
+    write_manifest(keep)
+    for r in removed:
+        p = UPLOAD_DIR / r["stored_filename"]
+        if p.exists():
+            p.unlink()
+    load_uploaded_df.clear()
 
 
 # --------------------------------------------------------------------------
@@ -360,63 +381,113 @@ def run_prophetboost(cutoff_str, B, K, tau, max_boost_round, early_stopping, pro
 
 
 # --------------------------------------------------------------------------
-# Theming
+# Theming — modeled on PV-Seg Studio (Sora + IBM Plex, indigo accent, pill nav)
 # --------------------------------------------------------------------------
 def inject_css(dark: bool):
     if dark:
-        bg, surface, surface2 = "#0b0d0a", "#15180f", "#1c2015"
-        text, text2, muted = "#f2f3ec", "#c0c3b3", "#83887a"
-        border = "rgba(255,255,255,0.14)"
-        accent, accent_soft = "#49d6ca", "#0f2f2b"
+        bg, surface, surface2 = "#0c0e1a", "#12162a", "#181d35"
+        text, text2, muted = "#eef0f8", "#b7bdd0", "#7d84a0"
+        border = "rgba(255,255,255,0.10)"
+        accent, accent_soft, accent_ink = "#7c8cf0", "#232a5c", "#c3caf7"
+        good_bg, good_ink = "#123a22", "#4ade80"
+        warn_bg, warn_ink = "#3a2c0f", "#f4b73f"
     else:
-        bg, surface, surface2 = "#ffffff", "#ffffff", "#f5f6f2"
-        text, text2, muted = "#12140f", "#52564b", "#82867a"
-        border = "rgba(18,20,15,0.12)"
-        accent, accent_soft = "#0e6f6a", "#e1f1ee"
+        bg, surface, surface2 = "#f4f6fb", "#ffffff", "#eef1f8"
+        text, text2, muted = "#12172e", "#5b6478", "#8890a0"
+        border = "#e3e7f0"
+        accent, accent_soft, accent_ink = "#3b4fd6", "#e4e7fc", "#2a3aa8"
+        good_bg, good_ink = "#e5f6ea", "#1f8a4c"
+        warn_bg, warn_ink = "#fdf3df", "#a86a0a"
 
     st.markdown(
         f"""
     <style>
-    @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Public+Sans:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700;800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
 
-    html, body, [class*="css"] {{ font-family: 'Public Sans', -apple-system, 'Segoe UI', sans-serif; }}
-    h1,h2,h3,h4 {{ font-family:'Fraunces', Georgia, serif !important; font-weight:600 !important; }}
+    html, body, [class*="css"] {{ font-family: 'IBM Plex Sans', -apple-system, 'Segoe UI', sans-serif; }}
+    h1,h2,h3,h4 {{ font-family:'Sora', sans-serif !important; font-weight:700 !important; letter-spacing:-.01em; }}
     code, .mono, [data-testid="stMetricValue"] {{ font-family:'IBM Plex Mono', monospace !important; }}
 
     #MainMenu {{visibility:hidden;}}
     footer {{visibility:hidden;}}
+    [data-testid="collapsedControl"] {{display:none;}}
+    section[data-testid="stSidebar"] {{display:none;}}
 
-    [data-testid="stAppViewContainer"], [data-testid="stHeader"] {{ background:{bg}; }}
-    [data-testid="stSidebar"] {{ background:{surface2}; border-right:1px solid {border}; }}
-    [data-testid="stSidebar"] * {{ color:{text}; }}
+    [data-testid="stAppViewContainer"] {{ background:{bg}; }}
+    [data-testid="stHeader"] {{ display:none; }}
     .stMarkdown, p, li, label, span {{ color:{text}; }}
     h1,h2,h3,h4 {{ color:{text}; }}
+    .block-container {{ padding-top:1.2rem; max-width:1180px; }}
 
-    [data-testid="stMetric"] {{
-        background:{surface}; border:1px solid {border}; border-radius:14px;
-        padding:14px 18px; box-shadow:0 1px 2px rgba(0,0,0,0.04);
-    }}
-    [data-testid="stMetricLabel"] {{ color:{muted} !important; }}
-    [data-testid="stMetricValue"] {{ color:{text} !important; }}
+    /* ---- top nav ---- */
+    .brand {{ display:flex; align-items:center; gap:10px; }}
+    .brand .logo {{ width:38px;height:38px;border-radius:11px; background:linear-gradient(155deg,{accent},{accent_ink}); display:flex;align-items:center;justify-content:center; font-size:18px; flex:none; }}
+    .brand .t1 {{ font-family:'Sora',sans-serif; font-weight:700; font-size:15.5px; line-height:1.15; color:{text}; }}
+    .brand .t2 {{ font-size:9.5px; letter-spacing:.09em; text-transform:uppercase; color:{muted}; }}
+    .badge {{ display:inline-flex; align-items:center; gap:5px; font-size:11px; font-weight:700; padding:6px 12px; border-radius:100px; white-space:nowrap; }}
+    .badge-green {{ background:{good_bg}; color:{good_ink}; }}
+    .badge-dot {{ width:6px;height:6px;border-radius:50%; background:currentColor; display:inline-block; }}
+    div[data-testid="stButton"] button {{ border-radius:100px !important; font-weight:600 !important; font-size:13.5px !important; }}
+    div[data-testid="stButton"] button[kind="secondary"] {{ border-color:{border} !important; color:{text2} !important; background:{surface} !important; }}
+    div[data-testid="stButton"] button[kind="primary"] {{ background:{accent_soft} !important; color:{accent_ink} !important; border-color:{accent_soft} !important; box-shadow:none !important; }}
+    hr {{ border-color:{border}; margin:8px 0 22px; }}
 
-    .card {{ background:{surface}; border:1px solid {border}; border-radius:16px; padding:22px 24px; margin-bottom:16px; }}
+    /* ---- page header ---- */
+    .eyebrow {{ font-size:11px; font-weight:700; letter-spacing:.1em; text-transform:uppercase; color:{accent}; margin-bottom:6px; }}
+    .pagetitle {{ font-family:'Sora',sans-serif; font-weight:800; font-size:clamp(24px,3vw,32px); color:{text}; letter-spacing:-.01em; }}
+    .pagesub {{ color:{text2}; font-size:14.5px; margin-top:6px; max-width:74ch; }}
+
+    /* ---- hero ---- */
+    .hero {{ background:linear-gradient(135deg,{surface} 0%,{surface2} 100%); border:1px solid {border}; border-radius:22px; padding:38px 42px; margin-bottom:26px; }}
+
+    /* ---- cards ---- */
+    .card {{ background:{surface}; border:1px solid {border}; border-radius:16px; padding:22px 24px; margin-bottom:16px; box-shadow:0 1px 2px rgba(15,23,42,0.03); }}
     .pill {{ display:inline-flex; align-items:center; font-size:11px; font-weight:700; letter-spacing:.02em; padding:4px 11px; border-radius:100px; color:#fff; margin-right:6px; }}
     .pill-neutral {{ background:{surface2}; color:{text2}; }}
-    .pill-accent {{ background:{accent_soft}; color:{accent}; }}
+    .pill-accent {{ background:{accent_soft}; color:{accent_ink}; }}
     .kw {{ font-size:11px; color:{muted}; background:{surface2}; padding:3px 9px; border-radius:6px; margin:2px 4px 2px 0; display:inline-block; }}
     .muted {{ color:{muted}; font-size:12.5px; }}
-    .authorcard {{ background:{surface}; border:1px solid {border}; border-radius:12px; padding:14px 16px; margin-top:10px; font-size:12.5px; }}
-    .authorcard b {{ font-size:13.5px; }}
-    .step {{ display:flex; flex-direction:column; gap:4px; padding:14px 16px; background:{surface}; border:1px solid {border}; border-radius:12px; flex:1; }}
-    .step .n {{ font-family:'IBM Plex Mono',monospace; font-size:11px; color:{accent}; font-weight:700; }}
-    .step .t {{ font-size:13px; font-weight:700; }}
-    .step .d {{ font-size:11.5px; color:{muted}; }}
     hr {{ border-color:{border}; }}
 
-    .stButton>button, .stDownloadButton>button {{ border-radius:9px; font-weight:700; border:1px solid {border}; }}
+    /* ---- step / icon list ---- */
+    .step {{ display:flex; gap:14px; align-items:flex-start; padding:16px 18px; background:{surface}; border:1px solid {border}; border-radius:14px; }}
+    .step .circ {{ width:30px;height:30px;border-radius:50%; background:{accent_soft}; color:{accent_ink}; display:flex; align-items:center; justify-content:center; font-family:'IBM Plex Mono',monospace; font-weight:700; font-size:13px; flex:none; }}
+    .step .t {{ font-size:14px; font-weight:700; color:{text}; }}
+    .step .d {{ font-size:12.5px; color:{muted}; margin-top:2px; }}
+
+    /* ---- stat tile ---- */
+    .stattile {{ background:{surface}; border:1px solid {border}; border-radius:14px; padding:16px 18px; }}
+    .stattile .lbl {{ font-size:10.5px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:{muted}; }}
+    .stattile .val {{ font-family:'IBM Plex Mono',monospace; font-size:26px; font-weight:600; color:{text}; margin-top:4px; }}
+    [data-testid="stMetric"] {{ background:{surface}; border:1px solid {border}; border-radius:14px; padding:14px 18px; box-shadow:0 1px 2px rgba(15,23,42,0.03); }}
+    [data-testid="stMetricLabel"] p {{ color:{muted} !important; font-size:10.5px !important; font-weight:700 !important; letter-spacing:.08em !important; text-transform:uppercase !important; }}
+    [data-testid="stMetricValue"] {{ color:{text} !important; font-size:22px !important; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }}
+
+    /* ---- feature grid ---- */
+    .fcard {{ background:{surface}; border:1px solid {border}; border-radius:16px; padding:20px 22px; height:100%; }}
+    .fcard .icon {{ width:34px;height:34px;border-radius:10px; background:{accent_soft}; color:{accent_ink}; display:flex; align-items:center; justify-content:center; font-size:16px; margin-bottom:10px; }}
+    .fcard .t {{ font-weight:700; font-size:14.5px; color:{text}; }}
+    .fcard .d {{ font-size:12.5px; color:{muted}; margin-top:5px; line-height:1.5; }}
+
+    /* ---- banners ---- */
+    .banner {{ border-radius:14px; padding:14px 18px; font-size:13px; display:flex; gap:10px; align-items:flex-start; }}
+    .banner-good {{ background:{good_bg}; color:{good_ink}; }}
+    .banner-warn {{ background:{warn_bg}; color:{warn_ink}; }}
+    .banner b {{ color:inherit; }}
+
+    /* ---- cta ---- */
+    .cta {{ background:{surface}; border:1px solid {border}; border-radius:20px; padding:40px; text-align:center; }}
+
+    /* ---- footer ---- */
+    .footerbar {{ display:flex; justify-content:space-between; flex-wrap:wrap; gap:8px; padding:22px 0 8px; margin-top:30px; border-top:1px solid {border}; font-size:11.5px; color:{muted}; }}
+
+    /* ---- misc streamlit component restyle ---- */
     .stTabs [data-baseweb="tab-list"] {{ gap:4px; }}
-    [data-testid="stFileUploaderDropzone"] {{ background:{surface2}; border:1.5px dashed {border}; }}
-    [data-testid="stExpander"] {{ background:{surface}; border:1px solid {border}; border-radius:12px; }}
+    .stTabs [aria-selected="true"] {{ color:{accent} !important; }}
+    .stTabs [data-baseweb="tab-highlight"] {{ background-color:{accent} !important; }}
+    [data-testid="stFileUploaderDropzone"] {{ background:{surface2}; border:1.5px dashed {border}; border-radius:14px; }}
+    [data-testid="stExpander"] {{ background:{surface}; border:1px solid {border}; border-radius:14px; }}
+    .stDownloadButton>button {{ border-radius:9px; font-weight:700; border:1px solid {border}; }}
     </style>
     """,
         unsafe_allow_html=True,
@@ -424,13 +495,13 @@ def inject_css(dark: bool):
 
 
 def plotly_theme(dark: bool):
-    text = "#f2f3ec" if dark else "#12140f"
-    muted = "#8a8d80"
-    grid = "#2b2e25" if dark else "#e6e5dd"
-    paper = "#15180f" if dark else "#ffffff"
+    text = "#eef0f8" if dark else "#12172e"
+    muted = "#7d84a0" if dark else "#8890a0"
+    grid = "#232a44" if dark else "#e9ecf4"
+    paper = "#12162a" if dark else "#ffffff"
     return dict(
         paper_bgcolor=paper, plot_bgcolor=paper,
-        font=dict(color=text, family="Public Sans, sans-serif", size=12),
+        font=dict(color=text, family="IBM Plex Sans, sans-serif", size=12),
         xaxis=dict(gridcolor=grid, zerolinecolor=grid, tickfont=dict(color=muted)),
         yaxis=dict(gridcolor=grid, zerolinecolor=grid, tickfont=dict(color=muted)),
         margin=dict(l=10, r=10, t=30, b=10),
@@ -439,46 +510,51 @@ def plotly_theme(dark: bool):
 
 
 # --------------------------------------------------------------------------
-# Sidebar
+# Top navigation (PV-Seg-Studio style: brand + pill tabs + status badges)
 # --------------------------------------------------------------------------
+NAV_ITEMS = ["Overview", "Dataset", "Train & Simulate", "Results & Validation", "Research & About"]
+
+if "page" not in st.session_state:
+    st.session_state.page = "Overview"
 if "dark_mode" not in st.session_state:
     st.session_state.dark_mode = False
 
-with st.sidebar:
-    st.markdown("### ⚡ ProphetBoost")
-    st.caption("Electricity load forecasting — Jeju Island")
-    st.markdown("---")
-    page = st.radio(
-        "Navigate",
-        [
-            "\U0001F4CA Overview",
-            "\U0001F4C4 Research Info",
-            "\U0001F5C2️ Dataset",
-            "\U0001F9EA Train a Model",
-            "▶️ Live Simulation",
-            "\U0001F4C8 Results & Analysis",
-            "\U0001F52C External Validation",
-            "⬆️ Upload Dataset",
-            "ℹ️ About",
-        ],
-        label_visibility="collapsed",
-    )
-    st.markdown("---")
-    st.toggle("Dark mode", key="dark_mode")
-    st.markdown("---")
+inject_css(st.session_state.dark_mode)
+PT = plotly_theme(st.session_state.dark_mode)
+
+top = st.columns([2.0, 1.15, 1.05, 1.6, 1.85, 1.65, 1.05, 0.55])
+with top[0]:
+    st.markdown('<div class="brand"><div class="logo">⚡</div><div><div class="t1">ProphetBoost</div><div class="t2">Machine Learning Lab</div></div></div>', unsafe_allow_html=True)
+for i, item in enumerate(NAV_ITEMS):
+    with top[i + 1]:
+        if st.button(item, key=f"nav_{item}", type="primary" if st.session_state.page == item else "secondary", use_container_width=True):
+            st.session_state.page = item
+            st.rerun()
+with top[6]:
+    st.markdown('<div style="padding-top:6px;"><span class="badge badge-green"><span class="badge-dot"></span>Local · Live</span></div>', unsafe_allow_html=True)
+with top[7]:
+    st.toggle("🌙", key="dark_mode", label_visibility="collapsed")
+st.markdown("<hr>", unsafe_allow_html=True)
+
+
+def page_header(eyebrow, title, subtitle):
+    st.markdown(f'<div class="eyebrow">{eyebrow}</div><div class="pagetitle">{title}</div><div class="pagesub">{subtitle}</div>', unsafe_allow_html=True)
+    st.write("")
+
+
+def goto(page_name):
+    st.session_state.page = page_name
+    st.rerun()
+
+
+def render_footer():
     st.markdown(
-        """<div class="authorcard">
-        <b>Nazrul Amin</b><br>
-        Dept. of Computer Engineering<br>
-        Jeju National University, South Korea<br>
-        Advisor: <b>Prof. Yung-Cheol Byun</b>
+        f"""<div class="footerbar">
+        <span>{PAPER['title']}</span>
+        <span>Nazrul Amin · Jeju National University</span>
         </div>""",
         unsafe_allow_html=True,
     )
-    st.caption("Running locally · Streamlit")
-
-inject_css(st.session_state.dark_mode)
-PT = plotly_theme(st.session_state.dark_mode)
 
 
 # --------------------------------------------------------------------------
@@ -536,18 +612,27 @@ def grouped_bar(models, series_dict, colors, yaxis_title=""):
     return fig
 
 
+def stat_tile(col, label, value):
+    col.markdown(f'<div class="stattile"><div class="lbl">{label}</div><div class="val">{value}</div></div>', unsafe_allow_html=True)
+
+
 # ==========================================================================
 # PAGE: Overview
 # ==========================================================================
 def page_overview():
-    st.markdown("### ProphetBoost: A hybrid pipeline for accurate and transparent electricity load forecasting")
     st.markdown(
-        '<p class="muted" style="font-size:15px;">Live dashboard over the real ProphetBoost research project: '
-        "Prophet trend/seasonality decomposition, stability-selected XGBoost, and a fully retrainable pipeline "
-        "over eight years of Jeju Island electricity load.</p>",
+        f"""<div class="hero">
+        <div class="eyebrow">Overview and demonstration</div>
+        <div class="pagetitle" style="font-size:clamp(26px,3.4vw,36px);">What is ProphetBoost?</div>
+        <p class="pagesub" style="font-size:15.5px;max-width:76ch;">A hybrid forecasting pipeline that decomposes electricity demand into trend and
+        seasonality with Prophet, then lets XGBoost learn the nonlinear residual — weather, calendar effects, recent load dynamics —
+        on a compact set of features chosen for being <i>stable</i>, not just accurate on one run.</p>
+        <p class="pagesub">That's more than fitting one model to the data. Because feature selection is bootstrap-validated, you can trust
+        that the 14 predictors it keeps aren't a fluke of one train/test split — and because Prophet's trend/seasonality are explicit,
+        every forecast is explainable in plain terms: this much is the season, this much is today's weather and recent load.</p>
+        </div>""",
         unsafe_allow_html=True,
     )
-    st.write("")
 
     n_uploaded = len(read_manifest())
     c1, c2, c3, c4 = st.columns(4)
@@ -557,26 +642,26 @@ def page_overview():
     c4.metric("Datasets tracked", str(1 + n_uploaded))
 
     st.write("")
-    st.markdown("#### How the pipeline works")
+    st.markdown("#### How does it work?")
     steps = [
-        ("01", "Decompose", "Prophet extracts trend + yearly seasonality from hourly load"),
-        ("02", "Engineer", "Calendar, lag (1h/24h), rolling stats + 4-station weather × lags → 111 features"),
-        ("03", "Select", "Bootstrap XGBoost stability selection: keep features stable across resamples → 14 features"),
-        ("04", "Train", "Final XGBoost, 5-fold CV with early stopping, on the selected subset"),
-        ("05", "Evaluate", "MAE / RMSE / MAPE on held-out post-cutoff hours"),
+        ("1", "Decompose", "Prophet extracts trend + yearly/weekly/daily seasonality from hourly load, fit on training data only."),
+        ("2", "Engineer & select", "Calendar, lag, rolling stats and 4-station weather (+ lags) give 111 features; 30 bootstrap runs of XGBoost keep only the 14 that are stable."),
+        ("3", "Train & evaluate", "A final XGBoost is cross-validated on the stable subset, then scored on 2019-2020 hours it never saw."),
     ]
-    cols = st.columns(5)
+    cols = st.columns(3)
     for col, (n, t, d) in zip(cols, steps):
-        col.markdown(f'<div class="step"><span class="n">{n}</span><span class="t">{t}</span><span class="d">{d}</span></div>', unsafe_allow_html=True)
+        col.markdown(f'<div class="step"><div class="circ">{n}</div><div><div class="t">{t}</div><div class="d">{d}</div></div></div>', unsafe_allow_html=True)
 
     st.write("")
-    st.markdown("#### Model architecture")
-    st.caption(
-        "ProphetBoost is a decomposition-residual pipeline, not a loose stack: Prophet first isolates the "
-        "structured part of demand (trend + seasonality), then XGBoost learns the nonlinear residual using "
-        "engineered calendar, lag, and weather features — narrowed to a stable subset before the final fit."
-    )
+    st.markdown("#### See the architecture for yourself")
+    st.caption("This isn't a mockup — it's the actual pipeline diagram from the published paper, and every stage below is live and retrainable in this app.")
     show_paper_figure(FIG_PIPELINE, "Fig. 2 (paper) — full ProphetBoost pipeline: preprocessing → Prophet decomposition → feature engineering → embedded+stability selection → XGBoost ensemble → evaluation & SHAP.")
+
+    s1, s2, s3, s4 = st.columns(4)
+    stat_tile(s1, "Published MAE", f"{MAE_WITH_FS_REF} MW")
+    stat_tile(s2, "Selected features", f"{N_SELECTED_FEATS_REF} / {N_CANDIDATE_FEATS_REF}")
+    stat_tile(s3, "MAE improvement", f"{MAE_IMPROVEMENT_PCT}%")
+    stat_tile(s4, "Test window", "2019–2020")
 
     a1, a2, a3 = st.columns(3)
     with a1:
@@ -584,7 +669,7 @@ def page_overview():
             """<div class="card" style="height:100%;">
             <b>1 · Prophet decomposition</b>
             <p class="muted" style="margin-top:8px;">y(t) = g(t) + s(t) + h(t) + ε<sub>t</sub></p>
-            <p class="muted">Trend g(t) (piecewise logistic/linear with changepoints), seasonality s(t) (Fourier series over daily/weekly/yearly cycles), holiday effects h(t), and i.i.d. residual noise ε<sub>t</sub>. Only ĝ(t) and ŝ(t) are kept as engineered features — Prophet is fit on the load series alone, univariate.</p>
+            <p class="muted">Trend g(t), Fourier seasonality s(t), holiday effects h(t), residual noise ε<sub>t</sub>. Only ĝ(t) and ŝ(t) become features — fit univariately, on load alone.</p>
             </div>""",
             unsafe_allow_html=True,
         )
@@ -592,7 +677,7 @@ def page_overview():
         st.markdown(
             """<div class="card" style="height:100%;">
             <b>2 · Embedded + stability selection</b>
-            <p class="muted" style="margin-top:8px;">A variance filter (Var(X<sub>j</sub>) &lt; 1e-8 removed) precedes B = 30 bootstrap resamples, each training a small XGBoost and keeping its top K = 15 features by gain. A feature is kept only if it lands in the top-K in ≥ τ·B = 18 of 30 resamples (τ = 0.6) — 111 candidates become 14 stable predictors.</p>
+            <p class="muted" style="margin-top:8px;">A variance filter precedes B = 30 bootstrap resamples, each keeping its top K = 15 features by gain. Kept only if selected in ≥ τ·B = 18 of 30 runs.</p>
             </div>""",
             unsafe_allow_html=True,
         )
@@ -601,147 +686,63 @@ def page_overview():
             """<div class="card" style="height:100%;">
             <b>3 · XGBoost ensemble</b>
             <p class="muted" style="margin-top:8px;">ŷ<sub>i</sub><sup>(t)</sup> = Σ<sub>k=1..t</sub> f<sub>k</sub>(x<sub>i</sub>)</p>
-            <p class="muted">A stage-wise ensemble of regression trees, each correcting the previous ensemble's residuals, optimizing squared loss plus an L2 leaf-weight penalty (γ, λ). The final model is tuned via 5-fold time-series cross-validation (xgb.cv) with early stopping — 1000 max rounds in the paper.</p>
+            <p class="muted">Stage-wise regression trees correcting prior residuals, tuned via 5-fold time-series CV with early stopping.</p>
             </div>""",
             unsafe_allow_html=True,
         )
-    st.caption("Full equations, the selection algorithm, and the exact 14 selected features are on **Research Info → Methodology**.")
+    st.caption("Full equations, the selection algorithm, and the exact 14 selected features are on **Research & About → Methodology**.")
 
     st.write("")
-    col1, col2 = st.columns([1.2, 1])
-    with col1:
-        st.markdown("#### Published benchmark comparison")
-        st.caption("ProphetBoost vs. nine baselines, feature selection on — paper Table 9. Full tables (with/without FS, complexity, significance) under **External Validation**.")
-        models = list(ACCURACY_WITH_FS.keys())
-        mae_vals = [ACCURACY_WITH_FS[m]["MAE"] for m in models]
-        st.plotly_chart(bar_chart_h(models, mae_vals, CATEGORICAL, "Test MAE (MW)"), use_container_width=True, config={"displayModeBar": False})
-    with col2:
-        st.markdown("#### At a glance")
-        st.markdown(
-            f"""<div class="card">
-            <b>⚡ Jeju Electricity Load dataset</b><br>
-            <span class="muted">75,983 hourly rows · 2012–2020 · 4 weather stations (Jeju, Gosan, Sungsan, Seogwipo)</span>
-            </div>
-            <div class="card">
-            <b>\U0001F4C4 {PAPER['title'][:40]}…</b><br>
-            <span class="muted">{PAPER['venue']} · {PAPER['citation']}</span><br>
-            <span class="muted">{PAPER['authors']}</span><br>
-            <a href="https://doi.org/{PAPER['doi']}" target="_blank" style="font-size:12px;">doi.org/{PAPER['doi']}</a>
-            </div>""",
-            unsafe_allow_html=True,
-        )
+    st.markdown("#### What can you do with this dashboard?")
+    feats = [
+        ("\U0001F5C2️", "Explore the dataset", "Nine years of hourly Jeju Island load and weather, with the paper's own published statistics alongside.", "Dataset"),
+        ("\U0001F9EA", "Train the real pipeline", "Run the actual Prophet + XGBoost pipeline live, with your own hyperparameters — not a precomputed demo.", "Train & Simulate"),
+        ("\U0001F4C8", "Check results & baselines", "Your live run's metrics and charts, plus the paper's benchmark against nine other forecasting models.", "Results & Validation"),
+        ("\U0001F4C4", "Read the research", "The full methodology with equations, the published figures, and the exact features the paper selected.", "Research & About"),
+    ]
+    g1, g2 = st.columns(2)
+    for i, (icon, title, desc, target) in enumerate(feats):
+        col = g1 if i % 2 == 0 else g2
+        with col:
+            st.markdown(f'<div class="fcard"><div class="icon">{icon}</div><div class="t">{title}</div><div class="d">{desc}</div></div>', unsafe_allow_html=True)
+            if st.button(f"Go there →", key=f"goto_{target}"):
+                goto(target)
 
+    st.write("")
+    with st.expander("\U0001F4D6 Learn the terms — six words you'll meet elsewhere in this dashboard"):
+        for term, desc in GLOSSARY:
+            st.markdown(f"**{term}** — {desc}")
 
-# ==========================================================================
-# PAGE: Research info
-# ==========================================================================
-def page_research():
-    st.markdown("### Research information")
+    st.write("")
     st.markdown(
-        f"""<div class="card">
-        <span class="pill pill-accent">Energy Forecasting</span>
-        <span class="pill pill-neutral">{PAPER['venue']}</span>
-        <h3 style="margin-top:14px;">{PAPER['title']}</h3>
-        <p class="muted"><b style="color:inherit;">{PAPER['authors'].split(',')[0]}</b>{','.join(PAPER['authors'].split(',')[1:])}</p>
-        <p class="muted">{PAPER['affiliation']} · Advisor: <b style="color:inherit;">{PAPER['advisor']}</b></p>
-        <p class="muted">{PAPER['citation']} · <a href="https://doi.org/{PAPER['doi']}" target="_blank">doi.org/{PAPER['doi']}</a></p>
-        <p class="muted">{PAPER['dates']}</p>
+        """<div class="cta">
+        <h3 style="margin-bottom:6px;">Your turn</h3>
+        <p class="muted" style="font-size:14px;">Pick a cutoff date, tune the feature-selection hyperparameters, and the same pipeline trains on the real dataset in about a minute.</p>
         </div>""",
         unsafe_allow_html=True,
     )
-
-    tab1, tab2, tab3, tab4 = st.tabs(["Abstract", "Methodology", "Selected features", "Keywords"])
-    with tab1:
-        st.write(PAPER["abstract"])
-        st.markdown("**Conclusion.** " + PAPER["conclusion"])
-    with tab2:
-        st.markdown(
-            """
-**1. Data preparation.** Empty columns dropped, `BASE_DT` parsed to a datetime index, remaining numeric
-columns (including the target) mean-imputed. Outliers are IQR-bounded, but genuine load peaks are kept —
-they're real peak-demand events, not noise.
-
-**2. Prophet decomposition.**
-"""
-        )
-        st.latex(r"y(t) = g(t) + s(t) + h(t) + \epsilon_t")
-        st.markdown(
-            r"""
-$g(t)$ is a (piecewise logistic or linear) trend with changepoints, $s(t)$ a Fourier-series seasonal
-component (daily / weekly / yearly), $h(t)$ holiday effects, and $\epsilon_t \sim \mathcal{N}(0,\sigma^2)$
-residual noise. Prophet is fit **univariately** on the load series alone — weather is not passed in as a
-Prophet regressor; it enters later, in the XGBoost stage. Only the fitted trend $\hat g(t)$ and yearly
-seasonality $\hat s(t)$ are kept as engineered features.
-
-**3. Feature engineering.** Calendar features (hour, day-of-week, weekend flag), load dynamics (1h and
-24h lags, 3h rolling mean/std), and 36 raw weather covariates from four stations (9 variables each:
-temperature, dew point, humidity, wind speed/direction, pressure, dew-point index, snow/ground metric,
-solar irradiance) — each weather variable also lagged 1h and 24h. Together: **111 candidate features**.
-Rows are split chronologically first (train `< 2019-01-01`, test `≥ 2019-01-01`), and Prophet is fit
-*only* on the training window to avoid leakage.
-
-**4. Embedded + stability feature selection.** A two-stage XAI-driven filter:
-"""
-        )
-        st.latex(r"\mathrm{Var}(X_j) < 10^{-8} \Rightarrow \text{drop}")
-        st.markdown(
-            r"""
-removes near-constant predictors. The survivors go through $B{=}30$ bootstrap resamples of the training
-set; each resample trains a small XGBoost ($\text{max\_depth}{=}4$, 50 rounds) and keeps its top $K{=}15$
-features by gain. A feature's selection frequency is
-"""
-        )
-        st.latex(r"C(j) = \sum_{b=1}^{B} \mathbf{1}(j \in S_b), \qquad S^{*} = \{\, j \mid C(j) \ge \tau B \,\}")
-        st.markdown("with $\\tau{=}0.6$ — a feature must land in the top-15 in **at least 18 of 30** resamples. This narrows 111 candidates to **14 stable predictors**.")
-        show_paper_figure(FIG_FEATURE_SELECTION, "Fig. 3 (paper) — the embedded + stability selection pipeline.")
-        show_paper_figure(FIG_SELECTION_OUTCOME, "Fig. 4 (paper) — 14 of 111 features (12.6%) retained; 97 (87.4%) dropped.")
-
-        st.markdown("**5. Final model.**")
-        st.latex(r"\hat{y}_i^{(t)} = \sum_{k=1}^{t} f_k(x_i), \qquad \mathcal{L} = \sum_i (y_i-\hat y_i)^2 + \gamma T + \tfrac{1}{2}\lambda\sum_j w_j^2")
-        st.markdown(
-            "XGBoost trained on the 14 selected features, with 5-fold time-series cross-validation "
-            "(`xgb.cv`, up to 1000 rounds, early stopping) picking the boosting-round count. "
-            "Split gain, used to rank features throughout, is:"
-        )
-        st.latex(r"\mathrm{Gain}(j) = \tfrac12\!\left[\tfrac{G_L^2}{H_L+\lambda} + \tfrac{G_R^2}{H_R+\lambda} - \tfrac{(G_L+G_R)^2}{H_L+H_R+\lambda}\right] - \gamma")
-
-        st.markdown("**6. Evaluation & interpretability.** MAE / MSE / RMSE / MAPE on the 2019-2020 test set, benchmarked against nine baselines (Transformer, TFT, Autoformer, DeepAR, DLinear, Deep RVFL, CNN-LSTM, CNN-ANN, ARIMA-LSTM) with Wilcoxon signed-rank and Friedman significance tests, plus SHAP for feature-level explanation.")
-        show_paper_figure(FIG_SHAP_BEESWARM, "Fig. 10 (paper) — SHAP beeswarm over 2,000 test observations. This app's live run shows gain-based importance (Results & Analysis); full SHAP is heavier to compute and shown here from the paper's own run.")
-
-    with tab3:
-        st.caption("Table 13 (paper) — the 14 features actually selected in the published run, ranked by gain.")
-        feat_df = pd.DataFrame(SELECTED_FEATURES_REF, columns=["Feature", "Gain", "% of total gain", "Corr. with residual", "Avg. |SHAP|", "Selection frequency"])
-        st.dataframe(feat_df, use_container_width=True, hide_index=True)
-        st.caption("roll3_mean and lag_1 alone account for 45.3% + 9.4% ≈ 55% of total gain — recent load dynamics dominate, with weather (dew-point index, solar irradiance) and hour contributing smaller but consistent gains.")
-    with tab4:
-        st.markdown("".join(f'<span class="kw">{k}</span>' for k in PAPER["keywords"]), unsafe_allow_html=True)
-
     st.write("")
-    st.markdown("#### Model diagnostics (published run)")
-    st.caption("From the paper's own run — compare against this app's live equivalents on **Results & Analysis**.")
-    show_paper_figure(FIG_MODEL_DIAGNOSTICS, "Fig. 8 (paper) — (A) learning curve, (B) actual vs. predicted 2019-2020, (C) residual distribution, (D) top-10 gain importances.")
-    if FEATURE_IMPORTANCE_IMG.exists():
-        st.image(str(FEATURE_IMPORTANCE_IMG), use_container_width=True, caption="Feature importance for the selected features (project figure).")
-    if WEATHER_PLOTS_IMG.exists():
-        st.image(str(WEATHER_PLOTS_IMG), use_container_width=True, caption="Partial dependence & residuals vs. weather predictors (project figure).")
+    cta1, cta2, cta3 = st.columns([1, 1, 1])
+    with cta2:
+        if st.button("Train It Yourself →", key="cta_train", type="primary", use_container_width=True):
+            goto("Train & Simulate")
 
 
 # ==========================================================================
 # PAGE: Dataset
 # ==========================================================================
 def page_dataset():
-    st.markdown("### Dataset")
-    st.caption("Loaded live from totalload_new.csv on disk — every stat below is computed from the real file.")
+    page_header("Dataset", "Jeju Island electricity load", "Loaded live from totalload_new.csv on disk — every stat below is computed from the real file, not cached copies.")
 
-    load_tab, uploads_tab = st.tabs(["⚡ Electricity load", "\U0001F4C1 Uploaded"])
+    load_tab, uploads_tab, upload_new_tab = st.tabs(["⚡ Electricity load", "\U0001F4C1 Uploaded datasets", "⬆️ Upload new"])
 
     with load_tab:
         df = load_load_df()
         c1, c2, c3, c4 = st.columns(4)
         c1.metric("Rows", f"{len(df):,}")
         c2.metric("Columns", len(df.columns))
-        c3.metric("Date range", f"{df['datetime'].min():%Y-%m-%d} → {df['datetime'].max():%Y-%m-%d}")
-        c4.metric("Load range", f"{df['TOTAL_LOAD'].min():.0f}–{df['TOTAL_LOAD'].max():.0f} MW")
+        c3.metric("Date range", f"{df['datetime'].min():%Y} → {df['datetime'].max():%Y}", help=f"{df['datetime'].min():%Y-%m-%d} → {df['datetime'].max():%Y-%m-%d}")
+        c4.metric("Load range (MW)", f"{df['TOTAL_LOAD'].min():.0f}–{df['TOTAL_LOAD'].max():.0f}")
 
         st.write("")
         monthly = df.set_index("datetime")["TOTAL_LOAD"].resample("MS").mean()
@@ -783,13 +784,13 @@ def page_dataset():
     with uploads_tab:
         records = read_manifest()
         if not records:
-            st.info("No datasets uploaded yet. Use **Upload Dataset** in the sidebar to add one.")
+            st.markdown('<div class="banner banner-warn">No datasets uploaded yet. Use the <b>Upload new</b> tab to add one.</div>', unsafe_allow_html=True)
         for rec in records:
             with st.container(border=True):
-                top = st.columns([4, 1])
-                top[0].markdown(f"**{rec['name']}**")
-                top[0].caption(f"{rec['original_filename']} · added {rec['uploaded_at'][:10]}")
-                if top[1].button("Remove", key=f"del_{rec['id']}"):
+                top_r = st.columns([4, 1])
+                top_r[0].markdown(f"**{rec['name']}**")
+                top_r[0].caption(f"{rec['original_filename']} · added {rec['uploaded_at'][:10]}")
+                if top_r[1].button("Remove", key=f"del_{rec['id']}"):
                     delete_uploaded(rec["id"])
                     st.rerun()
                 try:
@@ -803,63 +804,45 @@ def page_dataset():
                 except Exception as e:
                     st.error(f"Could not read this file: {e}")
 
+    with upload_new_tab:
+        st.caption("Adds a CSV to the local catalog (saved under `uploaded_datasets/`). Browse it above, or train the generic model on it from **Train & Simulate → Generic model**.")
+        file = st.file_uploader("Drop a CSV file", type=["csv"])
+        if file is not None:
+            try:
+                df = pd.read_csv(file)
+            except Exception:
+                file.seek(0)
+                df = pd.read_csv(file, encoding="latin-1")
 
-def delete_uploaded(rec_id):
-    records = read_manifest()
-    keep = [r for r in records if r["id"] != rec_id]
-    removed = [r for r in records if r["id"] == rec_id]
-    write_manifest(keep)
-    for r in removed:
-        p = UPLOAD_DIR / r["stored_filename"]
-        if p.exists():
-            p.unlink()
-    load_uploaded_df.clear()
+            st.markdown(f'<div class="banner banner-good">✓ Parsed {len(df):,} rows × {len(df.columns)} columns.</div>', unsafe_allow_html=True)
+            c1, c2, c3 = st.columns(3)
+            c1.metric("Rows", f"{len(df):,}")
+            c2.metric("Columns", len(df.columns))
+            c3.metric("Missing (avg.)", f"{df.isna().mean().mean()*100:.1f}%")
 
+            with st.expander("Column summary", expanded=True):
+                summary = pd.DataFrame({"type": df.dtypes.astype(str), "missing %": (df.isna().mean() * 100).round(1), "unique": df.nunique()})
+                st.dataframe(summary, use_container_width=True)
 
-# ==========================================================================
-# PAGE: Upload
-# ==========================================================================
-def page_upload():
-    st.markdown("### Upload a dataset")
-    st.caption("Adds a CSV to the local catalog (saved under `uploaded_datasets/`). Browse it on **Dataset**, or train a generic model on it from **Train a Model → Generic model**.")
+            st.markdown("**Preview**")
+            st.dataframe(df.head(10), use_container_width=True)
 
-    file = st.file_uploader("Drop a CSV file", type=["csv"])
-    if file is not None:
-        try:
-            df = pd.read_csv(file)
-        except Exception:
-            file.seek(0)
-            df = pd.read_csv(file, encoding="latin-1")
+            name = st.text_input("Dataset name", value=Path(file.name).stem)
+            note = st.text_input("Notes (optional)", placeholder="Source, units, related paper…")
 
-        st.success(f"Parsed {len(df):,} rows × {len(df.columns)} columns.")
-        c1, c2, c3 = st.columns(3)
-        c1.metric("Rows", f"{len(df):,}")
-        c2.metric("Columns", len(df.columns))
-        c3.metric("Missing (avg.)", f"{df.isna().mean().mean()*100:.1f}%")
-
-        with st.expander("Column summary", expanded=True):
-            summary = pd.DataFrame({"type": df.dtypes.astype(str), "missing %": (df.isna().mean() * 100).round(1), "unique": df.nunique()})
-            st.dataframe(summary, use_container_width=True)
-
-        st.markdown("**Preview**")
-        st.dataframe(df.head(10), use_container_width=True)
-
-        name = st.text_input("Dataset name", value=Path(file.name).stem)
-        note = st.text_input("Notes (optional)", placeholder="Source, units, related paper…")
-
-        if st.button("Add to catalog", type="primary"):
-            stored_filename = f"{datetime.now():%Y%m%d_%H%M%S}_{uuid.uuid4().hex[:6]}_{file.name}"
-            file.seek(0)
-            (UPLOAD_DIR / stored_filename).write_bytes(file.read())
-            records = read_manifest()
-            records.append({
-                "id": uuid.uuid4().hex, "name": name or file.name, "note": note,
-                "original_filename": file.name, "stored_filename": stored_filename,
-                "uploaded_at": datetime.now().isoformat(), "rows": len(df), "columns": len(df.columns),
-            })
-            write_manifest(records)
-            st.success(f"'{name}' added.")
-            st.balloons()
+            if st.button("Add to catalog", type="primary"):
+                stored_filename = f"{datetime.now():%Y%m%d_%H%M%S}_{uuid.uuid4().hex[:6]}_{file.name}"
+                file.seek(0)
+                (UPLOAD_DIR / stored_filename).write_bytes(file.read())
+                records = read_manifest()
+                records.append({
+                    "id": uuid.uuid4().hex, "name": name or file.name, "note": note,
+                    "original_filename": file.name, "stored_filename": stored_filename,
+                    "uploaded_at": datetime.now().isoformat(), "rows": len(df), "columns": len(df.columns),
+                })
+                write_manifest(records)
+                st.success(f"'{name}' added.")
+                st.balloons()
 
 
 # ==========================================================================
@@ -876,10 +859,16 @@ def numeric_columns(df):
     return df.select_dtypes(include=[np.number]).columns.tolist()
 
 
-def page_train():
-    st.markdown("### Train a model")
-    tab_pb, tab_generic = st.tabs(["⚡ ProphetBoost (real pipeline)", "\U0001F527 Generic model (any dataset)"])
+def default_feature_cols_generic(df, target):
+    return [c for c in numeric_columns(df) if c != target]
 
+
+# ==========================================================================
+# PAGE: Train & Simulate
+# ==========================================================================
+def page_train_and_simulate():
+    page_header("Train your model", "Train & Simulate", "Teach the real pipeline on the real dataset, then watch its forecast unfold hour by hour on data it never saw.")
+    tab_pb, tab_generic = st.tabs(["⚡ ProphetBoost (real pipeline)", "\U0001F527 Generic model (any dataset)"])
     with tab_pb:
         page_train_prophetboost()
     with tab_generic:
@@ -887,29 +876,30 @@ def page_train():
 
 
 def page_train_prophetboost():
-    st.caption(
-        "The exact ProphetBoost pipeline from the project notebook — Prophet decomposition, bootstrap "
-        "stability feature selection, and a cross-validated XGBoost — fit live on totalload_new.csv."
-    )
+    st.caption("Six steps, no code: the exact ProphetBoost pipeline from the project notebook, fit live on totalload_new.csv.")
 
-    with st.expander("Pipeline settings", expanded=True):
-        c1, c2 = st.columns(2)
-        cutoff = c1.date_input("Train / test cutoff date", value=pd.to_datetime("2019-01-01"), min_value=pd.to_datetime("2012-06-01"), max_value=pd.to_datetime("2020-06-01"))
-        c2.caption("Rows before this date train the model; rows on/after it are the held-out test set. Paper default: 2019-01-01.")
+    with st.expander("① Dataset & split", expanded=True):
+        st.markdown('<div class="banner banner-good">✓ Using the laboratory dataset already on this server — <b>totalload_new.csv</b>, 75,983 hourly rows.</div>', unsafe_allow_html=True)
+        cutoff = st.date_input("Train / test cutoff date", value=pd.to_datetime("2019-01-01"), min_value=pd.to_datetime("2012-06-01"), max_value=pd.to_datetime("2020-06-01"))
+        st.caption("Rows before this date train the model; rows on/after it are the held-out test set. Paper default: 2019-01-01.")
 
+    with st.expander("② Feature selection settings", expanded=True):
         c3, c4, c5 = st.columns(3)
         B = c3.slider("Bootstrap resamples (B)", 5, 30, 15, help="Paper uses 30. Fewer = faster, less stable selection.")
         K = c4.slider("Top-K per resample", 5, 30, 15)
         tau = c5.slider("Stability threshold (τ)", 0.3, 0.9, 0.6, step=0.05, help="Keep a feature if it's in the top-K in ≥ τ·B resamples.")
 
+    with st.expander("③ Model settings", expanded=True):
         c6, c7 = st.columns(2)
         max_rounds = c6.slider("Max CV boosting rounds", 100, 1000, 500, step=100)
         early_stop = c7.slider("Early stopping rounds", 10, 50, 20)
 
-        est_secs = int(B * 1.8 + 20)
-        st.caption(f"Estimated runtime: ~{est_secs}s (first run also fits Prophet once, cached afterward — that alone can take 20-60s).")
+    est_secs = int(B * 1.8 + 20)
+    st.markdown(f'<div class="banner banner-warn">⚠ Estimated runtime: ~{est_secs}s. The first run also fits Prophet once (cached afterward) — that alone can take 20-60s.</div>', unsafe_allow_html=True)
+    st.write("")
 
-    if st.button("\U0001F680 Train ProphetBoost", type="primary"):
+    trained_now = False
+    if st.button("▶ Start Training", type="primary"):
         prog = st.progress(0.0, text="Preparing engineered features (Prophet decomposition — cached after first run)…")
         try:
             engineered_df, _ = build_engineered_load_df()
@@ -953,19 +943,98 @@ def page_train_prophetboost():
         st.session_state.setdefault("runs", [])
         st.session_state.runs.insert(0, run)
         st.session_state.runs = st.session_state.runs[:8]
+        st.session_state["last_pb_run_id"] = run["id"]
+        trained_now = True
 
-        m = result["metrics"]
-        st.success(f"Trained in {elapsed:.1f}s · {result['n_selected_feats']} of {result['n_candidate_feats']} features selected · {result['n_train']:,} train / {result['n_test']:,} test rows.")
-        m1, m2, m3, m4 = st.columns(4)
-        m1.metric("MAE", f"{m['MAE']:.2f} MW")
-        m2.metric("RMSE", f"{m['RMSE']:.2f} MW")
-        m3.metric("R²", f"{m['R2']:.3f}")
-        m4.metric("MAPE", f"{m['MAPE']:.2f}%")
-        st.caption("Full charts, feature importance, and a day/month error breakdown are on **Results & Analysis**; a step-by-step reveal is on **Live Simulation**.")
+    runs = st.session_state.get("runs", [])
+    pb_runs = [r for r in runs if r.get("kind") == "prophetboost"]
+
+    st.write("")
+    st.markdown("#### Watch it learn")
+    if not pb_runs:
+        st.markdown(
+            """<div class="card" style="text-align:center;padding:44px 20px;">
+            <div style="font-size:26px;">\U0001F4C8</div>
+            <b>No training history yet</b>
+            <p class="muted" style="margin-top:6px;">Press Start Training above. Metrics, the actual-vs-predicted chart, and a live interval-by-interval reveal appear here once a run finishes.</p>
+            </div>""",
+            unsafe_allow_html=True,
+        )
+        return
+
+    default_run = pb_runs[0]
+    m = default_run["metrics"]
+    if trained_now:
+        st.markdown(f'<div class="banner banner-good">✓ Trained in {default_run["elapsed"]:.1f}s · {default_run["n_selected_feats"]} of {default_run["n_candidate_feats"]} features selected · {default_run["n_train"]:,} train / {default_run["n_test"]:,} test rows.</div>', unsafe_allow_html=True)
+        st.write("")
+    m1, m2, m3, m4 = st.columns(4)
+    m1.metric("MAE", f"{m['MAE']:.2f} MW")
+    m2.metric("RMSE", f"{m['RMSE']:.2f} MW")
+    m3.metric("R²", f"{m['R2']:.3f}")
+    m4.metric("MAPE", f"{m['MAPE']:.2f}%")
+    st.caption("Full charts, feature importance, and a day/month error breakdown are on **Results & Validation**.")
+
+    st.write("")
+    render_live_simulation(pb_runs, key_prefix="pb_inline")
 
 
-def default_feature_cols_generic(df, target):
-    return [c for c in numeric_columns(df) if c != target]
+# --------------------------------------------------------------------------
+# Live simulation (embedded inline on Train & Simulate, ProphetBoost tab)
+# --------------------------------------------------------------------------
+def pick_run(runs, key="pick_run"):
+    labels = [f"{r['label']} · trained {r['trained_at']}" for r in runs]
+    sel = st.selectbox("Model run", range(len(runs)), format_func=lambda i: labels[i], key=key)
+    return runs[sel]
+
+
+def render_live_simulation(runs, key_prefix="sim"):
+    st.markdown("##### Live simulation — actual vs. predicted, revealed interval by interval")
+    run = pick_run(runs, key=f"{key_prefix}_pick")
+    y_test = np.array(run["y_test"])
+    y_pred = np.array(run["y_pred"])
+
+    window = min(150, len(y_test))
+    y_test_w = y_test[-window:]
+    y_pred_w = y_pred[-window:]
+    if window < len(y_test):
+        st.caption(f"Showing the most recent {window} of {len(y_test)} test hours for a readable animation.")
+
+    idx_key = f"{key_prefix}_idx_{run['id']}"
+    if idx_key not in st.session_state:
+        st.session_state[idx_key] = max(2, window // 10)
+
+    c1, c2, c3 = st.columns([3, 1, 1])
+    st.session_state[idx_key] = c1.slider("Reveal up to interval", 2, window, st.session_state[idx_key], key=f"{key_prefix}_slider_{run['id']}")
+    play = c2.button("▶ Play", key=f"{key_prefix}_play_{run['id']}")
+    reset = c3.button("↺ Reset", key=f"{key_prefix}_reset_{run['id']}")
+    if reset:
+        st.session_state[idx_key] = 2
+        st.rerun()
+
+    chart_ph = st.empty()
+    metric_ph = st.empty()
+    unit = "MW" if run.get("kind") == "prophetboost" else run.get("target", "")
+
+    def render(i):
+        fig = go.Figure()
+        fig.add_trace(go.Scatter(x=list(range(i)), y=y_test_w[:i], name="Actual", mode="lines", line=dict(color="#8890a0", width=2, dash="dot")))
+        fig.add_trace(go.Scatter(x=list(range(i)), y=y_pred_w[:i], name="Predicted", mode="lines+markers", line=dict(color=SERIES_BLUE, width=2), marker=dict(size=4)))
+        fig.update_layout(**PT, height=340, xaxis_title="Test hour", yaxis_title=unit, showlegend=True, legend=dict(orientation="h", y=1.1, bgcolor="rgba(0,0,0,0)"))
+        chart_ph.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+        running_mae = float(np.mean(np.abs(y_test_w[:i] - y_pred_w[:i])))
+        with metric_ph.container():
+            mc1, mc2 = st.columns(2)
+            mc1.metric("Intervals revealed", f"{i} / {window}")
+            mc2.metric("Running MAE", f"{running_mae:,.2f}")
+
+    if play:
+        for i in range(st.session_state[idx_key], window + 1, max(1, window // 60)):
+            render(i)
+            time.sleep(0.06)
+        st.session_state[idx_key] = window
+        render(window)
+    else:
+        render(st.session_state[idx_key])
 
 
 def page_train_generic():
@@ -1006,7 +1075,7 @@ def page_train_generic():
         st.warning("Pick at least one feature column.")
         return
 
-    if st.button("\U0001F680 Train generic model", type="primary"):
+    if st.button("▶ Train generic model", type="primary"):
         with st.spinner(f"Training {model_name} on {label}…"):
             work = df.copy()
             if len(work) > max_rows:
@@ -1067,91 +1136,45 @@ def page_train_generic():
             st.session_state.runs.insert(0, run)
             st.session_state.runs = st.session_state.runs[:8]
 
-        st.success(f"Trained in {elapsed:.1f}s on {run['n_train']:,} rows · tested on {run['n_test']:,} rows.")
+        st.markdown(f'<div class="banner banner-good">✓ Trained in {elapsed:.1f}s on {run["n_train"]:,} rows · tested on {run["n_test"]:,} rows.</div>', unsafe_allow_html=True)
         m1, m2, m3, m4 = st.columns(4)
         m1.metric("MAE", f"{mae:,.2f}")
         m2.metric("RMSE", f"{rmse:,.2f}")
         m3.metric("R²", f"{r2:.3f}")
         m4.metric("MAPE", f"{mape:.1f}%" if not np.isnan(mape) else "—")
 
-
-# ==========================================================================
-# PAGE: Live simulation
-# ==========================================================================
-def pick_run(runs):
-    labels = [f"{r['label']} · trained {r['trained_at']}" for r in runs]
-    sel = st.selectbox("Model run", range(len(runs)), format_func=lambda i: labels[i])
-    return runs[sel]
-
-
-def page_simulation():
-    st.markdown("### Live simulation")
-    st.caption("Watch the trained model's forecast unfold, interval by interval, against the held-out test hours.")
-
-    runs = st.session_state.get("runs", [])
-    if not runs:
-        st.info("No trained model yet. Go to **Train a Model** first.")
-        return
-
-    run = pick_run(runs)
-    y_test = np.array(run["y_test"])
-    y_pred = np.array(run["y_pred"])
-
-    window = min(150, len(y_test))
-    y_test_w = y_test[-window:]
-    y_pred_w = y_pred[-window:]
-    if window < len(y_test):
-        st.caption(f"Showing the most recent {window} of {len(y_test)} test hours for a readable animation.")
-
-    idx_key = f"sim_idx_{run['id']}"
-    if idx_key not in st.session_state:
-        st.session_state[idx_key] = max(2, window // 10)
-
-    c1, c2, c3 = st.columns([3, 1, 1])
-    st.session_state[idx_key] = c1.slider("Reveal up to interval", 2, window, st.session_state[idx_key], key=f"slider_{run['id']}")
-    play = c2.button("▶ Play")
-    reset = c3.button("↺ Reset")
-    if reset:
-        st.session_state[idx_key] = 2
-        st.rerun()
-
-    chart_ph = st.empty()
-    metric_ph = st.empty()
-    unit = "MW" if run.get("kind") == "prophetboost" else run.get("target", "")
-
-    def render(i):
-        fig = go.Figure()
-        fig.add_trace(go.Scatter(x=list(range(i)), y=y_test_w[:i], name="Actual", mode="lines", line=dict(color="#8a8d80", width=2, dash="dot")))
-        fig.add_trace(go.Scatter(x=list(range(i)), y=y_pred_w[:i], name="Predicted", mode="lines+markers", line=dict(color=SERIES_BLUE, width=2), marker=dict(size=4)))
-        fig.update_layout(**PT, height=360, xaxis_title="Test hour", yaxis_title=unit, showlegend=True, legend=dict(orientation="h", y=1.1, bgcolor="rgba(0,0,0,0)"))
-        chart_ph.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
-        running_mae = float(np.mean(np.abs(y_test_w[:i] - y_pred_w[:i])))
-        with metric_ph.container():
-            mc1, mc2 = st.columns(2)
-            mc1.metric("Intervals revealed", f"{i} / {window}")
-            mc2.metric("Running MAE", f"{running_mae:,.2f}")
-
-    if play:
-        for i in range(st.session_state[idx_key], window + 1, max(1, window // 60)):
-            render(i)
-            time.sleep(0.06)
-        st.session_state[idx_key] = window
-        render(window)
-    else:
-        render(st.session_state[idx_key])
+    generic_runs = [r for r in st.session_state.get("runs", []) if r.get("kind") == "generic"]
+    if generic_runs:
+        st.write("")
+        render_live_simulation(generic_runs, key_prefix="generic_inline")
 
 
 # ==========================================================================
-# PAGE: Results & analysis
+# PAGE: Results & Validation
 # ==========================================================================
+def page_results_and_validation():
+    page_header("Evaluate & export", "Results & Validation", "How well did it do, and how does it compare to nine other forecasting models?")
+    tab_run, tab_bench = st.tabs(["\U0001F4CA Your run", "\U0001F52C Published benchmarks"])
+    with tab_run:
+        page_results()
+    with tab_bench:
+        page_external_validation()
+
+
 def page_results():
-    st.markdown("### Results & analysis")
     runs = st.session_state.get("runs", [])
     if not runs:
-        st.info("No trained model yet. Go to **Train a Model** first.")
+        st.markdown(
+            """<div class="card" style="text-align:center;padding:44px 20px;">
+            <div style="font-size:26px;">\U0001F4CA</div>
+            <b>Not trained yet</b>
+            <p class="muted" style="margin-top:6px;">Go to <b>Train & Simulate</b> and press Start Training. It runs the pipeline on the real dataset and collects the scores and figures below.</p>
+            </div>""",
+            unsafe_allow_html=True,
+        )
         return
 
-    run = pick_run(runs)
+    run = pick_run(runs, key="results_pick")
     m = run["metrics"]
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("MAE", f"{m['MAE']:,.2f}")
@@ -1164,7 +1187,7 @@ def page_results():
 
     if run.get("kind") == "prophetboost":
         delta = m["MAE"] - MAE_WITH_FS_REF
-        st.caption(f"Published paper (Table 7, with FS): MAE {MAE_WITH_FS_REF} MW · this run: {m['MAE']:.2f} MW ({'+' if delta >= 0 else ''}{delta:.2f} MW) — differences come from hyperparameters chosen above and the exact cutoff date.")
+        st.caption(f"Published paper (Table 7, with FS): MAE {MAE_WITH_FS_REF} MW · this run: {m['MAE']:.2f} MW ({'+' if delta >= 0 else ''}{delta:.2f} MW) — differences come from the hyperparameters chosen and the exact cutoff date.")
 
     y_test = np.array(run["y_test"])
     y_pred = np.array(run["y_pred"])
@@ -1172,7 +1195,7 @@ def page_results():
 
     st.markdown("#### Actual vs. predicted (full test set)")
     fig = go.Figure()
-    fig.add_trace(go.Scatter(x=x, y=y_test, name="Actual", mode="lines", line=dict(color="#8a8d80", width=1.5)))
+    fig.add_trace(go.Scatter(x=x, y=y_test, name="Actual", mode="lines", line=dict(color="#8890a0", width=1.5)))
     fig.add_trace(go.Scatter(x=x, y=y_pred, name="Predicted", mode="lines", line=dict(color=SERIES_BLUE, width=2)))
     fig.update_layout(**PT, height=360, xaxis_title="Test interval", yaxis_title="Load (MW)" if run.get("kind") == "prophetboost" else "")
     st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
@@ -1207,6 +1230,10 @@ def page_results():
             monthly_mae = res_df.groupby("Month")["abs_err"].mean().reindex(month_order).dropna()
             st.plotly_chart(bar_chart_h(list(monthly_mae.index), list(monthly_mae.values), CATEGORICAL, "MAE by month"), use_container_width=True, config={"displayModeBar": False})
 
+    if run.get("kind") == "prophetboost":
+        with st.expander("Compare against the published paper's diagnostic panel"):
+            show_paper_figure(FIG_MODEL_DIAGNOSTICS, "Fig. 8 (paper) — learning curve, actual vs. predicted, residuals, and top-10 gain importances from the published run.")
+
     pred_df = pd.DataFrame({"index": x, "actual": y_test, "predicted": y_pred, "residual": y_test - y_pred})
     st.download_button("Download predictions as CSV", pred_df.to_csv(index=False).encode(), file_name=f"predictions_{run['id']}.csv", mime="text/csv")
 
@@ -1214,29 +1241,22 @@ def page_results():
     hist = pd.DataFrame([{"Run": r["label"], "Trained": r["trained_at"], "MAE": round(r["metrics"]["MAE"], 2), "R²": round(r["metrics"]["R2"], 3), "Train rows": r["n_train"]} for r in runs])
     st.dataframe(hist, use_container_width=True, hide_index=True)
 
-    if run.get("kind") == "prophetboost":
-        with st.expander("Compare against the published paper's diagnostic panel"):
-            show_paper_figure(FIG_MODEL_DIAGNOSTICS, "Fig. 8 (paper) — learning curve, actual vs. predicted, residuals, and top-10 gain importances from the published run.")
 
-
-# ==========================================================================
-# PAGE: External validation
-# ==========================================================================
 def page_external_validation():
-    st.markdown("### External validation")
     st.caption(
         "ProphetBoost compared against nine baselines spanning statistical, linear, deep, and attention-based "
         "paradigms (ARIMA-LSTM, DLinear, CNN-ANN, Deep RVFL, CNN-LSTM, Transformer, DeepAR, Autoformer, TFT) — "
         "paper Tables 9, 11 and 12. These need PyTorch + Optuna hyperparameter search and take minutes to hours "
         "to train, so this section shows the published paper's own results rather than retraining them live — "
-        "everything on **Train a Model** and **Results & Analysis**, by contrast, runs live in this app."
+        "everything under **Your run**, by contrast, runs live in this app."
     )
 
     fs_on = st.toggle("Feature selection applied", value=True, help="Off shows the same comparison without the stability feature-selection step (paper's 'Without FS' columns).")
     data = ACCURACY_WITH_FS if fs_on else ACCURACY_WITHOUT_FS
     comp_data = COMPLEXITY_WITH_FS if fs_on else COMPLEXITY_WITHOUT_FS
 
-    st.markdown(f"**Headline result (paper Table 7):** feature selection cuts ProphetBoost's MAE by **{MAE_IMPROVEMENT_PCT}%** — from {MAE_WITHOUT_FS_REF} MW to {MAE_WITH_FS_REF} MW.")
+    st.markdown(f'<div class="banner banner-good">Headline result (paper Table 7): feature selection cuts ProphetBoost\'s MAE by <b>{MAE_IMPROVEMENT_PCT}%</b> — from {MAE_WITHOUT_FS_REF} MW to {MAE_WITH_FS_REF} MW.</div>', unsafe_allow_html=True)
+    st.write("")
 
     models = list(data.keys())
     st.markdown("#### Error metrics")
@@ -1273,53 +1293,138 @@ def page_external_validation():
 
 
 # ==========================================================================
-# PAGE: About
+# PAGE: Research & About
 # ==========================================================================
-def page_about():
-    st.markdown("### About")
+def page_research_and_about():
+    page_header("Research information", PAPER["title"][:52] + ("…" if len(PAPER["title"]) > 52 else ""), "The published paper behind this dashboard, in full — abstract, methodology, selected features, and how this app relates to it.")
+
     st.markdown(
-        f"""
+        f"""<div class="card">
+        <span class="pill pill-accent">Energy Forecasting</span>
+        <span class="pill pill-neutral">{PAPER['venue']}</span>
+        <h3 style="margin-top:14px;">{PAPER['title']}</h3>
+        <p class="muted"><b style="color:inherit;">{PAPER['authors'].split(',')[0]}</b>{','.join(PAPER['authors'].split(',')[1:])}</p>
+        <p class="muted">{PAPER['affiliation']} · Advisor: <b style="color:inherit;">{PAPER['advisor']}</b></p>
+        <p class="muted">{PAPER['citation']} · <a href="https://doi.org/{PAPER['doi']}" target="_blank">doi.org/{PAPER['doi']}</a></p>
+        <p class="muted">{PAPER['dates']}</p>
+        </div>""",
+        unsafe_allow_html=True,
+    )
+
+    tab1, tab2, tab3, tab4, tab5 = st.tabs(["Abstract", "Methodology", "Selected features", "Keywords", "About this app"])
+    with tab1:
+        st.write(PAPER["abstract"])
+        st.markdown("**Conclusion.** " + PAPER["conclusion"])
+    with tab2:
+        st.markdown(
+            """
+**1. Data preparation.** Empty columns dropped, `BASE_DT` parsed to a datetime index, remaining numeric
+columns (including the target) mean-imputed. Outliers are IQR-bounded, but genuine load peaks are kept —
+they're real peak-demand events, not noise.
+
+**2. Prophet decomposition.**
+"""
+        )
+        st.latex(r"y(t) = g(t) + s(t) + h(t) + \epsilon_t")
+        st.markdown(
+            r"""
+$g(t)$ is a (piecewise logistic or linear) trend with changepoints, $s(t)$ a Fourier-series seasonal
+component (daily / weekly / yearly), $h(t)$ holiday effects, and $\epsilon_t \sim \mathcal{N}(0,\sigma^2)$
+residual noise. Prophet is fit **univariately** on the load series alone — weather is not passed in as a
+Prophet regressor; it enters later, in the XGBoost stage. Only the fitted trend $\hat g(t)$ and yearly
+seasonality $\hat s(t)$ are kept as engineered features.
+
+**3. Feature engineering.** Calendar features (hour, day-of-week, weekend flag), load dynamics (1h and
+24h lags, 3h rolling mean/std), and 36 raw weather covariates from four stations (9 variables each:
+temperature, dew point, humidity, wind speed/direction, pressure, dew-point index, snow/ground metric,
+solar irradiance) — each weather variable also lagged 1h and 24h. Together: **111 candidate features**.
+Rows are split chronologically first (train `< 2019-01-01`, test `≥ 2019-01-01`), and Prophet is fit
+*only* on the training window to avoid leakage.
+
+**4. Embedded + stability feature selection.** A two-stage XAI-driven filter:
+"""
+        )
+        st.latex(r"\mathrm{Var}(X_j) < 10^{-8} \Rightarrow \text{drop}")
+        st.markdown(
+            r"""
+removes near-constant predictors. The survivors go through $B{=}30$ bootstrap resamples of the training
+set; each resample trains a small XGBoost ($\text{max\_depth}{=}4$, 50 rounds) and keeps its top $K{=}15$
+features by gain. A feature's selection frequency is
+"""
+        )
+        st.latex(r"C(j) = \sum_{b=1}^{B} \mathbf{1}(j \in S_b), \qquad S^{*} = \{\, j \mid C(j) \ge \tau B \,\}")
+        st.markdown("with $\\tau{=}0.6$ — a feature must land in the top-15 in **at least 18 of 30** resamples. This narrows 111 candidates to **14 stable predictors**.")
+        show_paper_figure(FIG_FEATURE_SELECTION, "Fig. 3 (paper) — the embedded + stability selection pipeline.")
+        show_paper_figure(FIG_SELECTION_OUTCOME, "Fig. 4 (paper) — 14 of 111 features (12.6%) retained; 97 (87.4%) dropped.")
+
+        st.markdown("**5. Final model.**")
+        st.latex(r"\hat{y}_i^{(t)} = \sum_{k=1}^{t} f_k(x_i), \qquad \mathcal{L} = \sum_i (y_i-\hat y_i)^2 + \gamma T + \tfrac{1}{2}\lambda\sum_j w_j^2")
+        st.markdown(
+            "XGBoost trained on the 14 selected features, with 5-fold time-series cross-validation "
+            "(`xgb.cv`, up to 1000 rounds, early stopping) picking the boosting-round count. "
+            "Split gain, used to rank features throughout, is:"
+        )
+        st.latex(r"\mathrm{Gain}(j) = \tfrac12\!\left[\tfrac{G_L^2}{H_L+\lambda} + \tfrac{G_R^2}{H_R+\lambda} - \tfrac{(G_L+G_R)^2}{H_L+H_R+\lambda}\right] - \gamma")
+
+        st.markdown("**6. Evaluation & interpretability.** MAE / MSE / RMSE / MAPE on the 2019-2020 test set, benchmarked against nine baselines (Transformer, TFT, Autoformer, DeepAR, DLinear, Deep RVFL, CNN-LSTM, CNN-ANN, ARIMA-LSTM) with Wilcoxon signed-rank and Friedman significance tests, plus SHAP for feature-level explanation.")
+        show_paper_figure(FIG_SHAP_BEESWARM, "Fig. 10 (paper) — SHAP beeswarm over 2,000 test observations. This app's live run shows gain-based importance (Results & Validation); full SHAP is heavier to compute and shown here from the paper's own run.")
+
+        st.write("")
+        st.markdown("#### Model diagnostics (published run)")
+        show_paper_figure(FIG_MODEL_DIAGNOSTICS, "Fig. 8 (paper) — (A) learning curve, (B) actual vs. predicted 2019-2020, (C) residual distribution, (D) top-10 gain importances.")
+        if FEATURE_IMPORTANCE_IMG.exists():
+            st.image(str(FEATURE_IMPORTANCE_IMG), use_container_width=True, caption="Feature importance for the selected features (project figure).")
+        if WEATHER_PLOTS_IMG.exists():
+            st.image(str(WEATHER_PLOTS_IMG), use_container_width=True, caption="Partial dependence & residuals vs. weather predictors (project figure).")
+
+    with tab3:
+        st.caption("Table 13 (paper) — the 14 features actually selected in the published run, ranked by gain.")
+        feat_df = pd.DataFrame(SELECTED_FEATURES_REF, columns=["Feature", "Gain", "% of total gain", "Corr. with residual", "Avg. |SHAP|", "Selection frequency"])
+        st.dataframe(feat_df, use_container_width=True, hide_index=True)
+        st.caption("roll3_mean and lag_1 alone account for 45.3% + 9.4% ≈ 55% of total gain — recent load dynamics dominate, with weather (dew-point index, solar irradiance) and hour contributing smaller but consistent gains.")
+    with tab4:
+        st.markdown("".join(f'<span class="kw">{k}</span>' for k in PAPER["keywords"]), unsafe_allow_html=True)
+    with tab5:
+        st.markdown(
+            f"""
 This dashboard runs the real **ProphetBoost** research project of **Nazrul Amin**, Department of
 Computer Engineering, Jeju National University, under the supervision of **Prof. Yung-Cheol Byun**.
 
 **What's live:** the Prophet decomposition, feature engineering, bootstrap stability feature
-selection, and final XGBoost model on **Train a Model** all run for real, on the actual
+selection, and final XGBoost model on **Train & Simulate** all run for real, on the actual
 `totalload_new.csv` dataset, with your chosen hyperparameters — nothing there is precomputed.
-**Results & Analysis** and **Live Simulation** are built entirely from that live run's output.
+**Results & Validation → Your run** is built entirely from that live run's output.
 
-**What's a reference, not a live run:** the nine baselines under **External Validation** (ARIMA-LSTM,
-DLinear, CNN-ANN, Deep RVFL, CNN-LSTM, Transformer, DeepAR, Autoformer, TFT) require PyTorch training
-with Optuna hyperparameter search and take minutes to hours — those numbers, along with the paper's
-own architecture figures on **Overview** and **Research Info**, are transcribed from the published
-paper (`1-s2.0-S0045790626003526-main.pdf`), shown as a faithful reference rather than re-run here.
+**What's a reference, not a live run:** the nine baselines under **Results & Validation → Published
+benchmarks** (ARIMA-LSTM, DLinear, CNN-ANN, Deep RVFL, CNN-LSTM, Transformer, DeepAR, Autoformer, TFT)
+require PyTorch training with Optuna hyperparameter search and take minutes to hours — those numbers,
+along with the paper's own architecture figures above, are transcribed from the published paper
+(`1-s2.0-S0045790626003526-main.pdf`), shown as a faithful reference rather than re-run here.
 
 **Dataset:** ~9 years of hourly Jeju Island electricity load paired with hourly weather from four
-stations (Jeju, Gosan, Sungsan, Seogwipo). Upload your own CSV via **Upload Dataset** to browse or
-train the generic model on it — it's saved under `uploaded_datasets/` and persists across restarts.
+stations (Jeju, Gosan, Sungsan, Seogwipo). Upload your own CSV via **Dataset → Upload new** to browse
+or train the generic model on it — it's saved under `uploaded_datasets/` and persists across restarts.
 
 {PAPER['conclusion']}
 """
-    )
-    st.markdown("---")
-    st.markdown(f"**{PAPER['title']}**")
-    st.markdown(f"*{PAPER['authors']}*")
-    st.markdown(f"{PAPER['venue']} · {PAPER['citation']}")
-    st.markdown(f"{PAPER['dates']}")
-    st.markdown(f"[doi.org/{PAPER['doi']}](https://doi.org/{PAPER['doi']})")
+        )
+        st.markdown("---")
+        st.markdown(f"**{PAPER['title']}**")
+        st.markdown(f"*{PAPER['authors']}*")
+        st.markdown(f"{PAPER['venue']} · {PAPER['citation']}")
+        st.markdown(f"{PAPER['dates']}")
+        st.markdown(f"[doi.org/{PAPER['doi']}](https://doi.org/{PAPER['doi']})")
 
 
 # --------------------------------------------------------------------------
 # Router
 # --------------------------------------------------------------------------
 ROUTES = {
-    "\U0001F4CA Overview": page_overview,
-    "\U0001F4C4 Research Info": page_research,
-    "\U0001F5C2️ Dataset": page_dataset,
-    "\U0001F9EA Train a Model": page_train,
-    "▶️ Live Simulation": page_simulation,
-    "\U0001F4C8 Results & Analysis": page_results,
-    "\U0001F52C External Validation": page_external_validation,
-    "⬆️ Upload Dataset": page_upload,
-    "ℹ️ About": page_about,
+    "Overview": page_overview,
+    "Dataset": page_dataset,
+    "Train & Simulate": page_train_and_simulate,
+    "Results & Validation": page_results_and_validation,
+    "Research & About": page_research_and_about,
 }
-ROUTES[page]()
+ROUTES[st.session_state.page]()
+render_footer()
