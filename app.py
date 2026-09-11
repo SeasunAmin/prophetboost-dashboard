@@ -190,14 +190,150 @@ PARTITION_REF = [("Training", "2012-2018", 52560), ("Test", "2019-2020", 17520),
 
 WEATHER_PREFIXES = ["JEJU_", "GOSAN_", "SUNGSAN_", "SEOGWIPO_"]
 
-GLOSSARY = [
-    ("MAE", "Mean Absolute Error — on average, how many megawatts the forecast is off by. Lower is better; it's in the same units as load (MW)."),
-    ("RMSE", "Root Mean Squared Error — like MAE, but squares errors before averaging, so a few big misses raise it more than many small ones."),
-    ("MAPE", "Mean Absolute Percentage Error — the average error as a percentage of actual load, so it's comparable across different demand levels."),
-    ("R²", "How much of the load's variation the model explains, from 0 to 1. 0.99 means it captures almost all of the pattern."),
-    ("Gain importance", "How much a feature reduced prediction error, summed across every tree split that used it — XGBoost's built-in way of ranking features."),
-    ("Stability selection", "Instead of trusting one feature-importance ranking, retrain on 30 random resamples and keep only features that rank highly almost every time."),
-]
+GLOSSARY = {
+    "EN": [
+        ("MAE", "Mean Absolute Error — on average, how many megawatts the forecast is off by. Lower is better; it's in the same units as load (MW)."),
+        ("RMSE", "Root Mean Squared Error — like MAE, but squares errors before averaging, so a few big misses raise it more than many small ones."),
+        ("MAPE", "Mean Absolute Percentage Error — the average error as a percentage of actual load, so it's comparable across different demand levels."),
+        ("R²", "How much of the load's variation the model explains, from 0 to 1. 0.99 means it captures almost all of the pattern."),
+        ("Gain importance", "How much a feature reduced prediction error, summed across every tree split that used it — XGBoost's built-in way of ranking features."),
+        ("Stability selection", "Instead of trusting one feature-importance ranking, retrain on 30 random resamples and keep only features that rank highly almost every time."),
+    ],
+    "KO": [
+        ("MAE (평균절대오차)", "예측이 평균적으로 몇 메가와트(MW) 정도 벗어나는지를 나타냅니다. 값이 낮을수록 좋으며, 단위는 수요와 동일한 MW입니다."),
+        ("RMSE (평균제곱근오차)", "MAE와 비슷하지만 평균을 내기 전에 오차를 제곱하므로, 작은 오차 여러 개보다 큰 오차 몇 개가 값을 더 크게 끌어올립니다."),
+        ("MAPE (평균절대백분율오차)", "실제 수요 대비 평균 오차를 백분율로 나타내어, 서로 다른 수요 수준 간에도 비교할 수 있게 해줍니다."),
+        ("R² (결정계수)", "모델이 수요 변동의 얼마나 많은 부분을 설명하는지를 0에서 1 사이 값으로 나타냅니다. 0.99라면 패턴의 거의 전부를 포착했다는 뜻입니다."),
+        ("Gain importance (게인 중요도)", "어떤 특성이 사용된 모든 트리 분할에서 예측 오차를 얼마나 줄였는지의 총합 — XGBoost가 특성 중요도를 매기는 내장 방식입니다."),
+        ("Stability selection (안정성 선택)", "하나의 특성 중요도 순위만 믿는 대신, 30번의 무작위 재표본으로 재학습하여 거의 매번 높은 순위를 차지하는 특성만 남깁니다."),
+    ],
+}
+
+# --------------------------------------------------------------------------
+# i18n — EN/KO UI strings. The paper's own English abstract/methodology text
+# (Research & About) is left untranslated: it's a direct transcription of a
+# published paper, and machine-translating its technical prose risks
+# misrepresenting it. Everything else — navigation, headers, the Overview
+# page, and shared labels — is fully translated.
+# --------------------------------------------------------------------------
+I18N = {
+    "EN": {
+        "brand_sub": "Machine Learning Lab",
+        "badge_local": "Local · Live",
+        "nav_Overview": "Overview", "nav_Dataset": "Dataset", "nav_Train & Simulate": "Train",
+        "nav_Results & Validation": "Results", "nav_Research & About": "Research",
+
+        "ov_eyebrow": "Overview and demonstration",
+        "ov_title": "What is ProphetBoost?",
+        "ov_p1": "A hybrid forecasting pipeline that decomposes electricity demand into trend and seasonality with Prophet, then lets XGBoost learn the nonlinear residual — weather, calendar effects, recent load dynamics — on a compact set of features chosen for being stable, not just accurate on one run.",
+        "ov_p2": "That's more than fitting one model to the data. Because feature selection is bootstrap-validated, you can trust that the 14 predictors it keeps aren't a fluke of one train/test split — and because Prophet's trend/seasonality are explicit, every forecast is explainable in plain terms: this much is the season, this much is today's weather and recent load.",
+        "m_hourly": "Hourly records", "m_feats": "Candidate → selected features", "m_pubmae": "Published MAE (with FS)", "m_datasets": "Datasets tracked",
+        "how_title": "How does it work?",
+        "step1_t": "Decompose", "step1_d": "Prophet extracts trend + yearly/weekly/daily seasonality from hourly load, fit on training data only.",
+        "step2_t": "Engineer & select", "step2_d": "Calendar, lag, rolling stats and 4-station weather (+ lags) give 111 features; 30 bootstrap runs of XGBoost keep only the 14 that are stable.",
+        "step3_t": "Train & evaluate", "step3_d": "A final XGBoost is cross-validated on the stable subset, then scored on 2019-2020 hours it never saw.",
+        "arch_title": "See the architecture for yourself",
+        "arch_caption": "This isn't a mockup — it's the actual pipeline diagram from the published paper, and every stage below is live and retrainable in this app.",
+        "stat_pubmae": "Published MAE", "stat_selfeat": "Selected features", "stat_improve": "MAE improvement", "stat_window": "Test window",
+        "arch1_t": "1 · Prophet decomposition", "arch1_d": "Trend g(t), Fourier seasonality s(t), holiday effects h(t), residual noise ε<sub>t</sub>. Only ĝ(t) and ŝ(t) become features — fit univariately, on load alone.",
+        "arch2_t": "2 · Embedded + stability selection", "arch2_d": "A variance filter precedes B = 30 bootstrap resamples, each keeping its top K = 15 features by gain. Kept only if selected in ≥ τ·B = 18 of 30 runs.",
+        "arch3_t": "3 · XGBoost ensemble", "arch3_d": "Stage-wise regression trees correcting prior residuals, tuned via 5-fold time-series CV with early stopping.",
+        "arch_footnote": "Full equations, the selection algorithm, and the exact 14 selected features are on **Research & About → Methodology**.",
+        "bench_title": "Published benchmark comparison",
+        "bench_caption": "ProphetBoost vs. nine baselines, feature selection on — paper Table 9. Full tables (with/without FS, complexity, significance) under **Results & Validation**.",
+        "glance_title": "At a glance",
+        "feat_title": "What can you do with this dashboard?",
+        "feat1_t": "Explore the dataset", "feat1_d": "Nine years of hourly Jeju Island load and weather, with the paper's own published statistics alongside.",
+        "feat2_t": "Train the real pipeline", "feat2_d": "Run the actual Prophet + XGBoost pipeline live, with your own hyperparameters — not a precomputed demo.",
+        "feat3_t": "Check results & baselines", "feat3_d": "Your live run's metrics and charts, plus the paper's benchmark against nine other forecasting models.",
+        "feat4_t": "Read the research", "feat4_d": "The full methodology with equations, the published figures, and the exact features the paper selected.",
+        "goto": "Go there →",
+        "glossary_title": "\U0001F4D6 Learn the terms — six words you'll meet elsewhere in this dashboard",
+        "cta_title": "Your turn", "cta_d": "Pick a cutoff date, tune the feature-selection hyperparameters, and the same pipeline trains on the real dataset in about a minute.",
+        "cta_btn": "Train It Yourself →",
+
+        "ds_eyebrow": "Dataset", "ds_title": "Jeju Island electricity load",
+        "ds_sub": "Loaded live from totalload_new.csv on disk — every stat below is computed from the real file, not cached copies.",
+        "tab_load": "⚡ Electricity load", "tab_uploaded": "\U0001F4C1 Uploaded datasets", "tab_upload_new": "⬆️ Upload new",
+        "m_rows": "Rows", "m_cols": "Columns", "m_daterange": "Date range", "m_loadrange": "Load range (MW)",
+        "monthly_load": "Monthly average load (MW)",
+
+        "tr_eyebrow": "Train your model", "tr_title": "Train & Simulate",
+        "tr_sub": "Teach the real pipeline on the real dataset, then watch its forecast unfold hour by hour on data it never saw.",
+        "tab_pb": "⚡ ProphetBoost (real pipeline)", "tab_generic": "\U0001F527 Generic model (any dataset)",
+        "step1_exp": "① Dataset & split", "step2_exp": "② Feature selection settings", "step3_exp": "③ Model settings",
+        "start_training": "▶ Start Training", "watch_learn": "Watch it learn",
+
+        "rv_eyebrow": "Evaluate & export", "rv_title": "Results & Validation",
+        "rv_sub": "How well did it do, and how does it compare to nine other forecasting models?",
+        "tab_yourrun": "\U0001F4CA Your run", "tab_bench": "\U0001F52C Published benchmarks",
+
+        "ra_eyebrow": "Research information",
+        "ra_sub": "The published paper behind this dashboard, in full — abstract, methodology, selected features, and how this app relates to it.",
+        "tab_abstract": "Abstract", "tab_method": "Methodology", "tab_selfeat": "Selected features", "tab_keywords": "Keywords", "tab_about": "About this app",
+        "lang_note": "Note: the paper's own abstract, methodology, and data tables below are shown in their original English — this dashboard translates its own interface, not the published paper's technical text.",
+    },
+    "KO": {
+        "brand_sub": "머신러닝 연구실",
+        "badge_local": "로컬 · 실시간",
+        "nav_Overview": "개요", "nav_Dataset": "데이터셋", "nav_Train & Simulate": "학습",
+        "nav_Results & Validation": "결과", "nav_Research & About": "연구",
+
+        "ov_eyebrow": "개요 및 시연",
+        "ov_title": "ProphetBoost란 무엇인가요?",
+        "ov_p1": "Prophet으로 전력 수요를 추세와 계절성으로 분해한 뒤, XGBoost가 날씨·달력 효과·최근 수요 변화 같은 비선형 잔차를 학습하는 하이브리드 예측 파이프라인입니다. 사용되는 특성은 한 번의 실행에서만 정확한 것이 아니라, 안정적으로 검증된 것만 선별합니다.",
+        "ov_p2": "단순히 데이터에 모델 하나를 맞추는 것이 아닙니다. 특성 선택은 부트스트랩으로 검증되므로, 최종적으로 남은 14개의 예측 변수가 우연한 train/test 분할의 결과가 아님을 신뢰할 수 있습니다. 또한 Prophet의 추세·계절성이 명시적이므로, 모든 예측은 '이만큼은 계절 요인, 이만큼은 오늘의 날씨와 최근 수요'처럼 평이한 말로 설명할 수 있습니다.",
+        "m_hourly": "시간별 기록 수", "m_feats": "후보 → 선택된 특성", "m_pubmae": "논문 MAE (특성 선택 적용)", "m_datasets": "추적 중인 데이터셋",
+        "how_title": "어떻게 동작하나요?",
+        "step1_t": "분해", "step1_d": "Prophet이 시간별 수요에서 추세와 연간·주간·일간 계절성을 추출하며, 학습 데이터에만 적합시킵니다.",
+        "step2_t": "특성 생성 및 선택", "step2_d": "달력, 지연값, 이동통계와 4개 관측소의 날씨(+지연값)로 111개의 특성을 만들고, XGBoost를 30회 부트스트랩 실행하여 안정적인 14개만 남깁니다.",
+        "step3_t": "학습 및 평가", "step3_d": "최종 XGBoost는 안정적인 특성 부분집합으로 교차검증되고, 한 번도 보지 못한 2019-2020년 시간대에서 평가됩니다.",
+        "arch_title": "직접 아키텍처를 확인해 보세요",
+        "arch_caption": "이것은 목업이 아닙니다 — 실제 논문에 실린 파이프라인 다이어그램이며, 아래의 모든 단계는 이 앱에서 실시간으로 재학습할 수 있습니다.",
+        "stat_pubmae": "논문 MAE", "stat_selfeat": "선택된 특성", "stat_improve": "MAE 개선율", "stat_window": "테스트 기간",
+        "arch1_t": "1 · Prophet 분해", "arch1_d": "추세 g(t), 푸리에 계절성 s(t), 휴일 효과 h(t), 잔차 노이즈 ε<sub>t</sub>. ĝ(t)와 ŝ(t)만 특성으로 사용되며, 수요 데이터만으로 단변량 적합됩니다.",
+        "arch2_t": "2 · 임베디드 + 안정성 선택", "arch2_d": "분산 필터를 거친 뒤 B=30회의 부트스트랩 재표본추출을 수행하며, 매 회 gain 기준 상위 K=15개 특성을 남깁니다. 30회 중 τ·B=18회 이상 선택된 특성만 최종적으로 유지됩니다.",
+        "arch3_t": "3 · XGBoost 앙상블", "arch3_d": "이전 잔차를 보정하는 단계적 회귀 트리 앙상블이며, 조기 종료를 적용한 5-겹 시계열 교차검증으로 튜닝됩니다.",
+        "arch_footnote": "전체 수식, 선택 알고리즘, 실제로 선택된 14개 특성은 **연구 정보 → Methodology**에서 확인할 수 있습니다.",
+        "bench_title": "논문 벤치마크 비교",
+        "bench_caption": "ProphetBoost와 9개 기준 모델 비교, 특성 선택 적용 — 논문 Table 9. 전체 표(적용/미적용, 복잡도, 유의성)는 **결과 및 검증**에서 확인할 수 있습니다.",
+        "glance_title": "한눈에 보기",
+        "feat_title": "이 대시보드로 무엇을 할 수 있나요?",
+        "feat1_t": "데이터셋 살펴보기", "feat1_d": "9년간의 제주도 시간별 전력 수요와 날씨 데이터를, 논문에 실린 통계와 함께 살펴봅니다.",
+        "feat2_t": "실제 파이프라인 학습하기", "feat2_d": "미리 계산된 데모가 아니라, 원하는 하이퍼파라미터로 실제 Prophet + XGBoost 파이프라인을 직접 실행합니다.",
+        "feat3_t": "결과 및 기준 모델 확인하기", "feat3_d": "직접 실행한 결과의 지표와 차트, 그리고 논문에 실린 9개 예측 모델과의 벤치마크 비교를 확인합니다.",
+        "feat4_t": "연구 내용 읽어보기", "feat4_d": "수식이 포함된 전체 방법론, 논문에 실린 그림들, 그리고 논문이 실제로 선택한 특성들을 확인합니다.",
+        "goto": "바로가기 →",
+        "glossary_title": "\U0001F4D6 용어 알아보기 — 이 대시보드에서 만나게 될 6가지 용어",
+        "cta_title": "이제 당신의 차례입니다", "cta_d": "기준 날짜를 선택하고 특성 선택 하이퍼파라미터를 조정하면, 동일한 파이프라인이 약 1분 만에 실제 데이터셋으로 학습됩니다.",
+        "cta_btn": "직접 학습해보기 →",
+
+        "ds_eyebrow": "데이터셋", "ds_title": "제주도 전력 수요",
+        "ds_sub": "디스크의 totalload_new.csv에서 실시간으로 불러옵니다 — 아래 모든 통계는 캐시된 사본이 아닌 실제 파일에서 직접 계산됩니다.",
+        "tab_load": "⚡ 전력 수요", "tab_uploaded": "\U0001F4C1 업로드된 데이터셋", "tab_upload_new": "⬆️ 새로 업로드",
+        "m_rows": "행", "m_cols": "열", "m_daterange": "기간", "m_loadrange": "수요 범위 (MW)",
+        "monthly_load": "월별 평균 수요 (MW)",
+
+        "tr_eyebrow": "모델 학습", "tr_title": "학습 및 시뮬레이션",
+        "tr_sub": "실제 데이터셋으로 실제 파이프라인을 학습시키고, 한 번도 본 적 없는 데이터에서 예측이 한 시간씩 펼쳐지는 과정을 지켜보세요.",
+        "tab_pb": "⚡ ProphetBoost (실제 파이프라인)", "tab_generic": "\U0001F527 범용 모델 (모든 데이터셋)",
+        "step1_exp": "① 데이터셋 및 분할", "step2_exp": "② 특성 선택 설정", "step3_exp": "③ 모델 설정",
+        "start_training": "▶ 학습 시작", "watch_learn": "학습 과정 지켜보기",
+
+        "rv_eyebrow": "평가 및 검증", "rv_title": "결과 및 검증",
+        "rv_sub": "이 모델은 얼마나 잘 작동했으며, 다른 9개의 예측 모델과 비교하면 어떨까요?",
+        "tab_yourrun": "\U0001F4CA 내 실행 결과", "tab_bench": "\U0001F52C 논문 벤치마크",
+
+        "ra_eyebrow": "연구 정보",
+        "ra_sub": "이 대시보드의 기반이 된 논문 전체 — 초록, 방법론, 선정된 특성, 그리고 이 앱이 논문과 어떻게 연결되는지 확인하세요.",
+        "tab_abstract": "초록", "tab_method": "방법론", "tab_selfeat": "선정된 특성", "tab_keywords": "키워드", "tab_about": "이 앱에 대하여",
+        "lang_note": "참고: 아래의 논문 초록·방법론·데이터 표는 원문 그대로 영어로 표시됩니다 — 이 대시보드는 자체 인터페이스만 번역하며, 발표된 논문의 기술적 원문은 번역하지 않습니다.",
+    },
+}
+
+
+def t(key):
+    return I18N.get(st.session_state.get("lang", "EN"), I18N["EN"]).get(key, I18N["EN"].get(key, key))
 
 # --------------------------------------------------------------------------
 # Page config
@@ -427,7 +563,7 @@ def inject_css(dark: bool):
     .badge {{ display:inline-flex; align-items:center; gap:5px; font-size:11px; font-weight:700; padding:6px 12px; border-radius:100px; white-space:nowrap; }}
     .badge-green {{ background:{good_bg}; color:{good_ink}; }}
     .badge-dot {{ width:6px;height:6px;border-radius:50%; background:currentColor; display:inline-block; }}
-    div[data-testid="stButton"] button {{ border-radius:100px !important; font-weight:600 !important; font-size:13.5px !important; }}
+    div[data-testid="stButton"] button {{ border-radius:100px !important; font-weight:600 !important; font-size:13.5px !important; padding:0.3rem 0.85rem !important; min-width:0 !important; }}
     div[data-testid="stButton"] button[kind="secondary"] {{ border-color:{border} !important; color:{text2} !important; background:{surface} !important; }}
     div[data-testid="stButton"] button[kind="primary"] {{ background:{accent_soft} !important; color:{accent_ink} !important; border-color:{accent_soft} !important; box-shadow:none !important; }}
     hr {{ border-color:{border}; margin:8px 0 22px; }}
@@ -518,21 +654,35 @@ if "page" not in st.session_state:
     st.session_state.page = "Overview"
 if "dark_mode" not in st.session_state:
     st.session_state.dark_mode = False
+if "lang" not in st.session_state:
+    st.session_state.lang = "EN"
 
 inject_css(st.session_state.dark_mode)
 PT = plotly_theme(st.session_state.dark_mode)
 
-top = st.columns([2.0, 1.15, 1.05, 1.6, 1.85, 1.65, 1.05, 0.55])
+NAV_COL_RATIOS = {
+    "EN": [1.9, 1.0, 0.85, 0.75, 0.85, 0.9, 0.78, 0.68, 0.68, 0.45],
+    "KO": [1.9, 0.8, 0.95, 0.75, 0.75, 0.75, 0.95, 0.68, 0.68, 0.45],
+}
+top = st.columns(NAV_COL_RATIOS.get(st.session_state.lang, NAV_COL_RATIOS["EN"]))
 with top[0]:
-    st.markdown('<div class="brand"><div class="logo">⚡</div><div><div class="t1">ProphetBoost</div><div class="t2">Machine Learning Lab</div></div></div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="brand"><div class="logo">⚡</div><div><div class="t1">ProphetBoost</div><div class="t2">{t("brand_sub")}</div></div></div>', unsafe_allow_html=True)
 for i, item in enumerate(NAV_ITEMS):
     with top[i + 1]:
-        if st.button(item, key=f"nav_{item}", type="primary" if st.session_state.page == item else "secondary", use_container_width=True):
+        if st.button(t(f"nav_{item}"), key=f"nav_{item}", type="primary" if st.session_state.page == item else "secondary", use_container_width=True):
             st.session_state.page = item
             st.rerun()
 with top[6]:
-    st.markdown('<div style="padding-top:6px;"><span class="badge badge-green"><span class="badge-dot"></span>Local · Live</span></div>', unsafe_allow_html=True)
+    st.markdown(f'<div style="padding-top:6px;"><span class="badge badge-green"><span class="badge-dot"></span>{t("badge_local")}</span></div>', unsafe_allow_html=True)
 with top[7]:
+    if st.button("EN", key="lang_en", type="primary" if st.session_state.lang == "EN" else "secondary", use_container_width=True):
+        st.session_state.lang = "EN"
+        st.rerun()
+with top[8]:
+    if st.button("KO", key="lang_ko", type="primary" if st.session_state.lang == "KO" else "secondary", use_container_width=True):
+        st.session_state.lang = "KO"
+        st.rerun()
+with top[9]:
     st.toggle("🌙", key="dark_mode", label_visibility="collapsed")
 st.markdown("<hr>", unsafe_allow_html=True)
 
@@ -622,109 +772,129 @@ def stat_tile(col, label, value):
 def page_overview():
     st.markdown(
         f"""<div class="hero">
-        <div class="eyebrow">Overview and demonstration</div>
-        <div class="pagetitle" style="font-size:clamp(26px,3.4vw,36px);">What is ProphetBoost?</div>
-        <p class="pagesub" style="font-size:15.5px;max-width:76ch;">A hybrid forecasting pipeline that decomposes electricity demand into trend and
-        seasonality with Prophet, then lets XGBoost learn the nonlinear residual — weather, calendar effects, recent load dynamics —
-        on a compact set of features chosen for being <i>stable</i>, not just accurate on one run.</p>
-        <p class="pagesub">That's more than fitting one model to the data. Because feature selection is bootstrap-validated, you can trust
-        that the 14 predictors it keeps aren't a fluke of one train/test split — and because Prophet's trend/seasonality are explicit,
-        every forecast is explainable in plain terms: this much is the season, this much is today's weather and recent load.</p>
+        <div class="eyebrow">{t("ov_eyebrow")}</div>
+        <div class="pagetitle" style="font-size:clamp(26px,3.4vw,36px);">{t("ov_title")}</div>
+        <p class="pagesub" style="font-size:15.5px;max-width:76ch;">{t("ov_p1")}</p>
+        <p class="pagesub">{t("ov_p2")}</p>
         </div>""",
         unsafe_allow_html=True,
     )
 
     n_uploaded = len(read_manifest())
     c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Hourly records", "75,983", help="2012-01-01 → 2020-12-08, this repo's copy of the dataset")
-    c2.metric("Candidate → selected features", f"{N_CANDIDATE_FEATS_REF} → {N_SELECTED_FEATS_REF}", help="Two-stage embedded + stability feature selection (paper Section 4.2)")
-    c3.metric("Published MAE (with FS)", f"{MAE_WITH_FS_REF:.2f} MW", help=f"{MAE_IMPROVEMENT_PCT}% lower than without feature selection ({MAE_WITHOUT_FS_REF} MW) — paper Table 7")
-    c4.metric("Datasets tracked", str(1 + n_uploaded))
+    c1.metric(t("m_hourly"), "75,983", help="2012-01-01 → 2020-12-08")
+    c2.metric(t("m_feats"), f"{N_CANDIDATE_FEATS_REF} → {N_SELECTED_FEATS_REF}")
+    c3.metric(t("m_pubmae"), f"{MAE_WITH_FS_REF:.2f} MW", help=f"{MAE_IMPROVEMENT_PCT}% — {MAE_WITHOUT_FS_REF} MW without FS")
+    c4.metric(t("m_datasets"), str(1 + n_uploaded))
 
     st.write("")
-    st.markdown("#### How does it work?")
+    st.markdown(f"#### {t('how_title')}")
     steps = [
-        ("1", "Decompose", "Prophet extracts trend + yearly/weekly/daily seasonality from hourly load, fit on training data only."),
-        ("2", "Engineer & select", "Calendar, lag, rolling stats and 4-station weather (+ lags) give 111 features; 30 bootstrap runs of XGBoost keep only the 14 that are stable."),
-        ("3", "Train & evaluate", "A final XGBoost is cross-validated on the stable subset, then scored on 2019-2020 hours it never saw."),
+        ("1", t("step1_t"), t("step1_d")),
+        ("2", t("step2_t"), t("step2_d")),
+        ("3", t("step3_t"), t("step3_d")),
     ]
     cols = st.columns(3)
-    for col, (n, t, d) in zip(cols, steps):
-        col.markdown(f'<div class="step"><div class="circ">{n}</div><div><div class="t">{t}</div><div class="d">{d}</div></div></div>', unsafe_allow_html=True)
+    for col, (n, st_title, st_desc) in zip(cols, steps):
+        col.markdown(f'<div class="step"><div class="circ">{n}</div><div><div class="t">{st_title}</div><div class="d">{st_desc}</div></div></div>', unsafe_allow_html=True)
 
     st.write("")
-    st.markdown("#### See the architecture for yourself")
-    st.caption("This isn't a mockup — it's the actual pipeline diagram from the published paper, and every stage below is live and retrainable in this app.")
+    st.markdown(f"#### {t('arch_title')}")
+    st.caption(t("arch_caption"))
     show_paper_figure(FIG_PIPELINE, "Fig. 2 (paper) — full ProphetBoost pipeline: preprocessing → Prophet decomposition → feature engineering → embedded+stability selection → XGBoost ensemble → evaluation & SHAP.")
 
     s1, s2, s3, s4 = st.columns(4)
-    stat_tile(s1, "Published MAE", f"{MAE_WITH_FS_REF} MW")
-    stat_tile(s2, "Selected features", f"{N_SELECTED_FEATS_REF} / {N_CANDIDATE_FEATS_REF}")
-    stat_tile(s3, "MAE improvement", f"{MAE_IMPROVEMENT_PCT}%")
-    stat_tile(s4, "Test window", "2019–2020")
+    stat_tile(s1, t("stat_pubmae"), f"{MAE_WITH_FS_REF} MW")
+    stat_tile(s2, t("stat_selfeat"), f"{N_SELECTED_FEATS_REF} / {N_CANDIDATE_FEATS_REF}")
+    stat_tile(s3, t("stat_improve"), f"{MAE_IMPROVEMENT_PCT}%")
+    stat_tile(s4, t("stat_window"), "2019–2020")
 
     a1, a2, a3 = st.columns(3)
     with a1:
         st.markdown(
-            """<div class="card" style="height:100%;">
-            <b>1 · Prophet decomposition</b>
+            f"""<div class="card" style="height:100%;">
+            <b>{t("arch1_t")}</b>
             <p class="muted" style="margin-top:8px;">y(t) = g(t) + s(t) + h(t) + ε<sub>t</sub></p>
-            <p class="muted">Trend g(t), Fourier seasonality s(t), holiday effects h(t), residual noise ε<sub>t</sub>. Only ĝ(t) and ŝ(t) become features — fit univariately, on load alone.</p>
+            <p class="muted">{t("arch1_d")}</p>
             </div>""",
             unsafe_allow_html=True,
         )
     with a2:
         st.markdown(
-            """<div class="card" style="height:100%;">
-            <b>2 · Embedded + stability selection</b>
-            <p class="muted" style="margin-top:8px;">A variance filter precedes B = 30 bootstrap resamples, each keeping its top K = 15 features by gain. Kept only if selected in ≥ τ·B = 18 of 30 runs.</p>
+            f"""<div class="card" style="height:100%;">
+            <b>{t("arch2_t")}</b>
+            <p class="muted" style="margin-top:8px;">{t("arch2_d")}</p>
             </div>""",
             unsafe_allow_html=True,
         )
     with a3:
         st.markdown(
-            """<div class="card" style="height:100%;">
-            <b>3 · XGBoost ensemble</b>
+            f"""<div class="card" style="height:100%;">
+            <b>{t("arch3_t")}</b>
             <p class="muted" style="margin-top:8px;">ŷ<sub>i</sub><sup>(t)</sup> = Σ<sub>k=1..t</sub> f<sub>k</sub>(x<sub>i</sub>)</p>
-            <p class="muted">Stage-wise regression trees correcting prior residuals, tuned via 5-fold time-series CV with early stopping.</p>
+            <p class="muted">{t("arch3_d")}</p>
             </div>""",
             unsafe_allow_html=True,
         )
-    st.caption("Full equations, the selection algorithm, and the exact 14 selected features are on **Research & About → Methodology**.")
+    st.caption(t("arch_footnote"))
 
     st.write("")
-    st.markdown("#### What can you do with this dashboard?")
+    col1, col2 = st.columns([1.2, 1])
+    with col1:
+        st.markdown(f"#### {t('bench_title')}")
+        st.caption(t("bench_caption"))
+        models = list(ACCURACY_WITH_FS.keys())
+        mae_vals = [ACCURACY_WITH_FS[m]["MAE"] for m in models]
+        st.plotly_chart(bar_chart_h(models, mae_vals, CATEGORICAL, "Test MAE (MW)"), use_container_width=True, config={"displayModeBar": False})
+    with col2:
+        st.markdown(f"#### {t('glance_title')}")
+        st.markdown(
+            f"""<div class="card">
+            <b>⚡ Jeju Electricity Load dataset</b><br>
+            <span class="muted">75,983 hourly rows · 2012–2020 · 4 weather stations (Jeju, Gosan, Sungsan, Seogwipo)</span>
+            </div>
+            <div class="card">
+            <b>\U0001F4C4 {PAPER['title'][:40]}…</b><br>
+            <span class="muted">{PAPER['venue']} · {PAPER['citation']}</span><br>
+            <span class="muted">{PAPER['authors']}</span><br>
+            <a href="https://doi.org/{PAPER['doi']}" target="_blank" style="font-size:12px;">doi.org/{PAPER['doi']}</a>
+            </div>""",
+            unsafe_allow_html=True,
+        )
+
+    st.write("")
+    st.markdown(f"#### {t('feat_title')}")
     feats = [
-        ("\U0001F5C2️", "Explore the dataset", "Nine years of hourly Jeju Island load and weather, with the paper's own published statistics alongside.", "Dataset"),
-        ("\U0001F9EA", "Train the real pipeline", "Run the actual Prophet + XGBoost pipeline live, with your own hyperparameters — not a precomputed demo.", "Train & Simulate"),
-        ("\U0001F4C8", "Check results & baselines", "Your live run's metrics and charts, plus the paper's benchmark against nine other forecasting models.", "Results & Validation"),
-        ("\U0001F4C4", "Read the research", "The full methodology with equations, the published figures, and the exact features the paper selected.", "Research & About"),
+        ("\U0001F5C2️", t("feat1_t"), t("feat1_d"), "Dataset"),
+        ("\U0001F9EA", t("feat2_t"), t("feat2_d"), "Train & Simulate"),
+        ("\U0001F4C8", t("feat3_t"), t("feat3_d"), "Results & Validation"),
+        ("\U0001F4C4", t("feat4_t"), t("feat4_d"), "Research & About"),
     ]
     g1, g2 = st.columns(2)
     for i, (icon, title, desc, target) in enumerate(feats):
         col = g1 if i % 2 == 0 else g2
         with col:
             st.markdown(f'<div class="fcard"><div class="icon">{icon}</div><div class="t">{title}</div><div class="d">{desc}</div></div>', unsafe_allow_html=True)
-            if st.button(f"Go there →", key=f"goto_{target}"):
+            if st.button(t("goto"), key=f"goto_{target}"):
                 goto(target)
 
     st.write("")
-    with st.expander("\U0001F4D6 Learn the terms — six words you'll meet elsewhere in this dashboard"):
-        for term, desc in GLOSSARY:
+    with st.expander(t("glossary_title")):
+        for term, desc in GLOSSARY.get(st.session_state.lang, GLOSSARY["EN"]):
             st.markdown(f"**{term}** — {desc}")
 
     st.write("")
     st.markdown(
-        """<div class="cta">
-        <h3 style="margin-bottom:6px;">Your turn</h3>
-        <p class="muted" style="font-size:14px;">Pick a cutoff date, tune the feature-selection hyperparameters, and the same pipeline trains on the real dataset in about a minute.</p>
+        f"""<div class="cta">
+        <h3 style="margin-bottom:6px;">{t("cta_title")}</h3>
+        <p class="muted" style="font-size:14px;">{t("cta_d")}</p>
         </div>""",
         unsafe_allow_html=True,
     )
     st.write("")
     cta1, cta2, cta3 = st.columns([1, 1, 1])
     with cta2:
-        if st.button("Train It Yourself →", key="cta_train", type="primary", use_container_width=True):
+        if st.button(t("cta_btn"), key="cta_train", type="primary", use_container_width=True):
             goto("Train & Simulate")
 
 
@@ -732,21 +902,21 @@ def page_overview():
 # PAGE: Dataset
 # ==========================================================================
 def page_dataset():
-    page_header("Dataset", "Jeju Island electricity load", "Loaded live from totalload_new.csv on disk — every stat below is computed from the real file, not cached copies.")
+    page_header(t("ds_eyebrow"), t("ds_title"), t("ds_sub"))
 
-    load_tab, uploads_tab, upload_new_tab = st.tabs(["⚡ Electricity load", "\U0001F4C1 Uploaded datasets", "⬆️ Upload new"])
+    load_tab, uploads_tab, upload_new_tab = st.tabs([t("tab_load"), t("tab_uploaded"), t("tab_upload_new")])
 
     with load_tab:
         df = load_load_df()
         c1, c2, c3, c4 = st.columns(4)
-        c1.metric("Rows", f"{len(df):,}")
-        c2.metric("Columns", len(df.columns))
-        c3.metric("Date range", f"{df['datetime'].min():%Y} → {df['datetime'].max():%Y}", help=f"{df['datetime'].min():%Y-%m-%d} → {df['datetime'].max():%Y-%m-%d}")
-        c4.metric("Load range (MW)", f"{df['TOTAL_LOAD'].min():.0f}–{df['TOTAL_LOAD'].max():.0f}")
+        c1.metric(t("m_rows"), f"{len(df):,}")
+        c2.metric(t("m_cols"), len(df.columns))
+        c3.metric(t("m_daterange"), f"{df['datetime'].min():%Y} → {df['datetime'].max():%Y}", help=f"{df['datetime'].min():%Y-%m-%d} → {df['datetime'].max():%Y-%m-%d}")
+        c4.metric(t("m_loadrange"), f"{df['TOTAL_LOAD'].min():.0f}–{df['TOTAL_LOAD'].max():.0f}")
 
         st.write("")
         monthly = df.set_index("datetime")["TOTAL_LOAD"].resample("MS").mean()
-        st.markdown("**Monthly average load (MW)**")
+        st.markdown(f"**{t('monthly_load')}**")
         st.plotly_chart(line_chart(monthly.index, monthly.values, "Avg. load", SERIES_BLUE, "MW"), use_container_width=True, config={"displayModeBar": False})
 
         with st.expander("Column reference"):
@@ -867,8 +1037,8 @@ def default_feature_cols_generic(df, target):
 # PAGE: Train & Simulate
 # ==========================================================================
 def page_train_and_simulate():
-    page_header("Train your model", "Train & Simulate", "Teach the real pipeline on the real dataset, then watch its forecast unfold hour by hour on data it never saw.")
-    tab_pb, tab_generic = st.tabs(["⚡ ProphetBoost (real pipeline)", "\U0001F527 Generic model (any dataset)"])
+    page_header(t("tr_eyebrow"), t("tr_title"), t("tr_sub"))
+    tab_pb, tab_generic = st.tabs([t("tab_pb"), t("tab_generic")])
     with tab_pb:
         page_train_prophetboost()
     with tab_generic:
@@ -878,18 +1048,18 @@ def page_train_and_simulate():
 def page_train_prophetboost():
     st.caption("Six steps, no code: the exact ProphetBoost pipeline from the project notebook, fit live on totalload_new.csv.")
 
-    with st.expander("① Dataset & split", expanded=True):
+    with st.expander(t("step1_exp"), expanded=True):
         st.markdown('<div class="banner banner-good">✓ Using the laboratory dataset already on this server — <b>totalload_new.csv</b>, 75,983 hourly rows.</div>', unsafe_allow_html=True)
         cutoff = st.date_input("Train / test cutoff date", value=pd.to_datetime("2019-01-01"), min_value=pd.to_datetime("2012-06-01"), max_value=pd.to_datetime("2020-06-01"))
         st.caption("Rows before this date train the model; rows on/after it are the held-out test set. Paper default: 2019-01-01.")
 
-    with st.expander("② Feature selection settings", expanded=True):
+    with st.expander(t("step2_exp"), expanded=True):
         c3, c4, c5 = st.columns(3)
         B = c3.slider("Bootstrap resamples (B)", 5, 30, 15, help="Paper uses 30. Fewer = faster, less stable selection.")
         K = c4.slider("Top-K per resample", 5, 30, 15)
         tau = c5.slider("Stability threshold (τ)", 0.3, 0.9, 0.6, step=0.05, help="Keep a feature if it's in the top-K in ≥ τ·B resamples.")
 
-    with st.expander("③ Model settings", expanded=True):
+    with st.expander(t("step3_exp"), expanded=True):
         c6, c7 = st.columns(2)
         max_rounds = c6.slider("Max CV boosting rounds", 100, 1000, 500, step=100)
         early_stop = c7.slider("Early stopping rounds", 10, 50, 20)
@@ -899,7 +1069,7 @@ def page_train_prophetboost():
     st.write("")
 
     trained_now = False
-    if st.button("▶ Start Training", type="primary"):
+    if st.button(t("start_training"), type="primary"):
         prog = st.progress(0.0, text="Preparing engineered features (Prophet decomposition — cached after first run)…")
         try:
             engineered_df, _ = build_engineered_load_df()
@@ -950,7 +1120,7 @@ def page_train_prophetboost():
     pb_runs = [r for r in runs if r.get("kind") == "prophetboost"]
 
     st.write("")
-    st.markdown("#### Watch it learn")
+    st.markdown(f"#### {t('watch_learn')}")
     if not pb_runs:
         st.markdown(
             """<div class="card" style="text-align:center;padding:44px 20px;">
@@ -1153,8 +1323,8 @@ def page_train_generic():
 # PAGE: Results & Validation
 # ==========================================================================
 def page_results_and_validation():
-    page_header("Evaluate & export", "Results & Validation", "How well did it do, and how does it compare to nine other forecasting models?")
-    tab_run, tab_bench = st.tabs(["\U0001F4CA Your run", "\U0001F52C Published benchmarks"])
+    page_header(t("rv_eyebrow"), t("rv_title"), t("rv_sub"))
+    tab_run, tab_bench = st.tabs([t("tab_yourrun"), t("tab_bench")])
     with tab_run:
         page_results()
     with tab_bench:
@@ -1296,7 +1466,7 @@ def page_external_validation():
 # PAGE: Research & About
 # ==========================================================================
 def page_research_and_about():
-    page_header("Research information", PAPER["title"][:52] + ("…" if len(PAPER["title"]) > 52 else ""), "The published paper behind this dashboard, in full — abstract, methodology, selected features, and how this app relates to it.")
+    page_header(t("ra_eyebrow"), PAPER["title"][:52] + ("…" if len(PAPER["title"]) > 52 else ""), t("ra_sub"))
 
     st.markdown(
         f"""<div class="card">
@@ -1311,7 +1481,9 @@ def page_research_and_about():
         unsafe_allow_html=True,
     )
 
-    tab1, tab2, tab3, tab4, tab5 = st.tabs(["Abstract", "Methodology", "Selected features", "Keywords", "About this app"])
+    tab1, tab2, tab3, tab4, tab5 = st.tabs([t("tab_abstract"), t("tab_method"), t("tab_selfeat"), t("tab_keywords"), t("tab_about")])
+    if st.session_state.lang == "KO":
+        st.caption(t("lang_note"))
     with tab1:
         st.write(PAPER["abstract"])
         st.markdown("**Conclusion.** " + PAPER["conclusion"])
