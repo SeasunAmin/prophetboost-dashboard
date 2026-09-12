@@ -124,7 +124,10 @@ I18N = {
 
         "fc_eyebrow": "Forecast", "fc_title": "Run a forecast",
         "fc_sub": "Three quick choices, then press Run.",
-        "fc_step1": "1 · Data", "fc_step2": "2 · Models", "fc_step3": "3 · Settings",
+        "fc_step1": "1 · Data", "fc_step2": "2 · Models", "fc_step3": "3 · Split the data",
+        "fc_split_how": "Split by", "fc_split_pct": "Percentage", "fc_split_date": "Date",
+        "fc_cutoff": "Training ends on", "fc_train": "Train", "fc_test": "Test",
+        "fc_split_bad": "That split leaves too little data on one side — adjust it.",
         "fc_dataset": "Dataset", "fc_target": "What to predict", "fc_models": "Models to run",
         "fc_testsize": "Hold out the last", "fc_rows": "Rows to use",
         "fc_run": "▶ Run Forecast", "fc_running": "Forecasting…",
@@ -162,7 +165,10 @@ I18N = {
 
         "fc_eyebrow": "예측", "fc_title": "예측 실행하기",
         "fc_sub": "세 가지만 고르고 실행을 누르세요.",
-        "fc_step1": "1 · 데이터", "fc_step2": "2 · 모델", "fc_step3": "3 · 설정",
+        "fc_step1": "1 · 데이터", "fc_step2": "2 · 모델", "fc_step3": "3 · 데이터 분할",
+        "fc_split_how": "분할 기준", "fc_split_pct": "비율", "fc_split_date": "날짜",
+        "fc_cutoff": "학습 종료 날짜", "fc_train": "학습", "fc_test": "평가",
+        "fc_split_bad": "한쪽 데이터가 너무 적습니다 — 분할을 조정하세요.",
         "fc_dataset": "데이터셋", "fc_target": "예측할 값", "fc_models": "실행할 모델",
         "fc_testsize": "마지막 구간 평가 비율", "fc_rows": "사용할 행 수",
         "fc_run": "▶ 예측 실행", "fc_running": "예측 중…",
@@ -376,9 +382,14 @@ def build_engineered_load_df():
     return df, base + weather_feats + lagged
 
 
-def run_prophetboost(split_frac, B=15, K=15, tau=0.6, progress_cb=None):
+def run_prophetboost(split_frac, cutoff=None, B=15, K=15, tau=0.6, progress_cb=None):
     engineered_df, full_feats = build_engineered_load_df()
-    split = int(len(engineered_df) * (1 - split_frac))
+    if cutoff is not None:
+        split = int((engineered_df["ds"] < pd.Timestamp(cutoff)).sum())
+    else:
+        split = int(len(engineered_df) * (1 - split_frac))
+    if split < 50 or len(engineered_df) - split < 10:
+        raise ValueError("that split leaves too little data on one side")
     train = engineered_df.iloc[:split]
     test = engineered_df.iloc[split:]
 
@@ -689,14 +700,45 @@ def page_forecast():
         picked = st.multiselect(t("fc_models"), options,
                                 default=["XGBoost", "Random Forest", "LightGBM"], key="fc_models")
 
-    with st.expander(t("fc_step3")):
-        s1, s2 = st.columns(2)
-        test_pct = s1.slider(t("fc_testsize"), 10, 40, 20, key="fc_test") / 100
-        row_options = sorted({n for n in (2000, 5000, 10000, 20000, 40000) if n < len(df)} | {len(df)})
-        max_rows = s2.select_slider(t("fc_rows"), options=row_options,
-                                    value=min(20000, len(df)) if min(20000, len(df)) in row_options else row_options[-1],
-                                    key="fc_rows")
+    st.write("")
+    st.markdown(f"**{t('fc_step3')}**")
+    row_options = sorted({n for n in (2000, 5000, 10000, 20000, 40000) if n < len(df)} | {len(df)})
+    sc1, sc2, sc3 = st.columns([0.9, 1.3, 1.1])
+    has_dates = bool(date_col) and date_col in df.columns
+    split_how = sc1.radio(t("fc_split_how"), [t("fc_split_pct")] + ([t("fc_split_date")] if has_dates else []),
+                          horizontal=True, key="fc_how", label_visibility="collapsed")
 
+    cutoff = None
+    test_pct = 0.2
+    if has_dates and split_how == t("fc_split_date"):
+        all_dates = pd.to_datetime(df[date_col], errors="coerce").dropna()
+        lo, hi = all_dates.min().date(), all_dates.max().date()
+        default_cut = all_dates.quantile(0.8).date()
+        cutoff = sc2.date_input(t("fc_cutoff"), value=default_cut, min_value=lo, max_value=hi, key="fc_cut")
+        test_pct = float((all_dates >= pd.Timestamp(cutoff)).mean())
+    else:
+        test_pct = sc2.slider(t("fc_testsize"), 10, 40, 20, key="fc_test_pct",
+                              format="%d%%") / 100
+
+    max_rows = sc3.select_slider(t("fc_rows"), options=row_options,
+                                 value=min(20000, len(df)) if min(20000, len(df)) in row_options else row_options[-1],
+                                 key="fc_rows")
+
+    used = min(int(max_rows), len(df))
+    n_test = int(round(used * test_pct))
+    n_train = used - n_test
+    train_pct = 100 - test_pct * 100
+    st.markdown(
+        f'<div style="display:flex;height:34px;border-radius:9px;overflow:hidden;border:1px solid rgba(128,128,140,.25);">'
+        f'<div style="width:{train_pct:.1f}%;background:#3b4fd6;color:#fff;display:flex;align-items:center;'
+        f'justify-content:center;font-size:11.5px;font-weight:700;">{t("fc_train")} · {n_train:,}</div>'
+        f'<div style="width:{test_pct*100:.1f}%;background:#eb6834;color:#fff;display:flex;align-items:center;'
+        f'justify-content:center;font-size:11.5px;font-weight:700;">{t("fc_test")} · {n_test:,}</div></div>',
+        unsafe_allow_html=True)
+    if cutoff is not None:
+        st.caption(f"{t('fc_train')}: < {cutoff} · {t('fc_test')}: ≥ {cutoff}")
+
+    st.write("")
     run = st.button(t("fc_run"), type="primary")
     st.write("")
 
@@ -716,11 +758,18 @@ def page_forecast():
             t0 = time.time()
             try:
                 if name == "ProphetBoost":
-                    out = run_prophetboost(test_pct)
+                    out = run_prophetboost(test_pct, cutoff=cutoff)
                     res = {"y_true": out["y_true"], "y_pred": out["y_pred"],
                            "importances": out["importances"], "n_test": out["n_test"]}
                 else:
-                    split = int(len(work) * (1 - test_pct))
+                    if cutoff is not None and date_col in work.columns:
+                        wdates = pd.to_datetime(work[date_col], errors="coerce")
+                        split = int((wdates < pd.Timestamp(cutoff)).sum())
+                    else:
+                        split = int(len(work) * (1 - test_pct))
+                    if split < 20 or len(work) - split < 10:
+                        st.error(t("fc_split_bad"))
+                        return
                     X_tr, X_te = work[feats].iloc[:split], work[feats].iloc[split:]
                     y_tr, y_te = work[target].iloc[:split], work[target].iloc[split:]
                     model = MODEL_BUILDERS[name]()
