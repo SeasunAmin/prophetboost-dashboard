@@ -1,68 +1,48 @@
 1
-00:00:00,000 --> 00:00:02,789
-ProphetBoost Studio — forecast electricity demand in one click
+00:00:00,000 --> 00:00:05,570
+ProphetBoost Studio — AI Lab, Jeju National University
 
 2
-00:00:02,789 --> 00:00:04,783
-From the Artificial Intelligence Lab, Jeju National University
-
-3
-00:00:05,275 --> 00:00:07,659
+00:00:05,582 --> 00:00:10,932
 Three steps: choose data, pick models, see the forecast
 
-4
-00:00:08,151 --> 00:00:11,337
-Ten models — XGBoost, LightGBM, Random Forest, neural networks, ProphetBoost
+3
+00:00:10,941 --> 00:00:18,161
+Ten models — XGBoost, LightGBM, Random Forest, neural nets, ProphetBoost
 
-5
-00:00:13,355 --> 00:00:16,152
+4
+00:00:18,174 --> 00:00:22,684
 Step 1 — choose a dataset and what to predict
 
+5
+00:00:22,694 --> 00:00:27,034
+Step 2 — pick as many models as you want
+
 6
-00:00:16,152 --> 00:00:18,535
-Step 2 — pick as many models as you want to compare
+00:00:27,042 --> 00:00:33,762
+Step 3 — split by percentage or by a cut-off date
 
 7
-00:00:19,020 --> 00:00:21,014
-Step 3 — split the data into training and test
+00:00:33,763 --> 00:00:37,623
+One click runs every model
 
 8
-00:00:22,468 --> 00:00:25,249
-Split by percentage, or by a cut-off date for time series
+00:00:37,649 --> 00:00:42,639
+Best model ranked first — MAE, RMSE, R², MAPE
 
 9
-00:00:25,249 --> 00:00:27,243
-The bar shows exactly how many rows go to each side
+00:00:42,649 --> 00:00:45,699
+The forecast replays live against real demand
 
 10
-00:00:27,267 --> 00:00:29,261
-One click runs every model you picked
+00:00:45,716 --> 00:00:50,656
+Models scored side by side + feature importance
 
 11
-00:00:31,597 --> 00:00:34,783
-The best model is ranked first — MAE, RMSE, R² and MAPE
+00:00:50,664 --> 00:00:54,644
+Download results, or upload your own CSV
 
 12
-00:00:35,260 --> 00:00:39,637
-The forecast replays live against the real values
-
-13
-00:00:40,122 --> 00:00:42,505
-Every model is scored side by side
-
-14
-00:00:42,990 --> 00:00:45,389
-And you can see which features drove the forecast
-
-15
-00:00:46,033 --> 00:00:48,027
-Download the predictions as CSV
-
-16
-00:00:50,252 --> 00:00:53,438
-Browse the built-in data — or upload your own CSV and forecast that
-
-17
-00:00:53,438 --> 00:00:55,837
-ProphetBoost Studio · AI Lab, Jeju National University
+00:00:54,652 --> 00:00:58,352
+About — the published research behind it
 
