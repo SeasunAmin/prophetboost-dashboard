@@ -5,3 +5,5 @@ streamlit.log
 uploaded_datasets/
 .claude/
 gh_login.log
+tunnel.log
+.tools/
